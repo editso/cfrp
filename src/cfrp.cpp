@@ -15,9 +15,13 @@
 
 using namespace std;
 
+#define MAX_CACHE 2048 * 1024
+
 namespace rpr
 {
     
+
+
     typedef struct{
         int fd;
         void *ptr;
@@ -50,7 +54,6 @@ namespace rpr
     }
 
     int make_connect(struct peer peer, r_sock *sock){
-        printf("connect: %s:%d\n", peer.addr, peer.port);
         int fd = socket(AF_INET, SOCK_STREAM, 0);
         struct sockaddr_in addr = {
             .sin_family = AF_INET,
@@ -81,11 +84,12 @@ namespace rpr
 
     int handle_agent(int fd, int efd, map<int, r_sock> &mappers){
         Message msg;
-        char buff[1024];
+        char buff[MAX_CACHE];
         int s1 = -1, s2 = -1, b_size = sizeof(buff);
         r_sock sock;
         while(1){
             s1 = recv(fd, &msg, sizeof(msg), 0);
+            printf("agent len: %d", msg.len);
             s2 = recv(fd, buff, msg.len, 0);
             if(s1 == -1 || s2 == -1  && errno == EAGAIN){
                 break;
@@ -112,7 +116,7 @@ namespace rpr
 
     int handle_message(int fd, int tfd, int efd, unsigned int id){
         Message msg;
-        char buff[1024];
+        char buff[MAX_CACHE];
         int s;
         char mbuff[sizeof(msg) + sizeof(buff)];
         while(1){
@@ -129,10 +133,10 @@ namespace rpr
             }
             msg.id = id;
             msg.len = s;
-            printf("len: %d, fd: %d, errno: %d\n", buff, s, fd, errno);
+            printf("len: %d, fd: %d, errno: %d\n", s, fd, errno);
             memcpy(mbuff, &msg, sizeof(msg));
             memcpy(mbuff + sizeof(msg), buff, s);
-            if(send(tfd, mbuff, sizeof(Message) + msg.len, 0) < 0){
+            if(send(tfd, mbuff, sizeof(Message) + s, 0) < 0){
                 perror("send error");
                 epoll_ctl(efd, EPOLL_CTL_DEL, tfd, NULL);
                 return -1;
@@ -217,7 +221,6 @@ namespace rpr
                             bzero(&in, sizeof(in));
                             bzero(sock, sizeof(sock));
                             int _fd = accept(fd , (struct sockaddr*)&in, &len);
-                            printf("connect\n");
                             int _stat = this->check_mapper();
                             if( !_stat && this->client.sockfd == fd || _stat && this->listen_mapper.sockfd == fd){
                                 shutdown(_fd, SHUT_RDWR);
@@ -243,7 +246,9 @@ namespace rpr
                             if(this->mapper.sockfd == fd){
                                 // receive mapper message
                                 logger->debug("receive mapper message");
-                                handle_agent(fd,this->efd, this->mappers);
+                                if(handle_agent(fd,this->efd, this->mappers)){
+                                    epoll_ctl(this->efd, EPOLL_CTL_MOD, fd, &ev);
+                                }
                             }else{
                                 // receive client message
                                 logger->debug("receive client message");
@@ -291,7 +296,7 @@ namespace rpr
                 epoll_add(this->efd, this->r_client.sockfd, EPOLLET|EPOLLIN, NULL);
                 struct epoll_event events[5], ev;
                 int fd, c = 0, l = 0;
-                char buff[1024]; 
+                char buff[MAX_CACHE]; 
                 Message *msg;
                 r_sock *sock;
                 Data* data;
@@ -333,11 +338,13 @@ namespace rpr
                                         break;
                                     }
                                     this->mappers.insert(pair<int, r_sock>(msg->id, *sock));
-                                    if(epoll_add(this->efd, sock->sockfd, EPOLLIN|EPOLLET, msg) < 0 ){
+                                    Message emsg = {msg->id, msg->len};
+                                    if(epoll_add(this->efd, sock->sockfd, EPOLLIN|EPOLLET, &emsg) < 0 ){
                                         perror("epoll error");
                                     }
                                 }
                                 l = recv(fd, buff, msg->len, 0);
+                                free(msg);
                                 if(l == -1 && errno == EAGAIN){
                                     break;
                                 }else if (l == 0 && errno == EAGAIN)
@@ -350,18 +357,15 @@ namespace rpr
                                     perror("send to proxy error");
                                     epoll_ctl(this->efd, EPOLL_CTL_DEL, sock->sockfd, NULL);
                                 }
-                                
                             }
                             epoll_ctl(this->efd, EPOLL_CTL_MOD, fd, &ev);
                         }else{
                             // receive proxy message
                             logger->info("receive proxy message");
-                            // Message* msg = (Message*)*ev.data.ptr;
                             msg = (Message*)data->ptr;
-                            // printf("ptr: %d\n", *ev.data.ptr);
-                            // printf("id: %d\n", msg->id);
                             if( handle_message(fd, this->r_client.sockfd, this->efd, msg->id) < 0){
                                 shutdown(fd, SHUT_RDWR);
+                                free(msg);
                             }else{
                                 epoll_ctl(this->efd, EPOLL_CTL_MOD, fd, &ev);
                             }
