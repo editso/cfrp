@@ -17,11 +17,9 @@ using namespace std;
 
 #define MAX_CACHE 2048 * 1024
 
-namespace rpr
+namespace fcfrp
 {
     
-
-
     typedef struct{
         int fd;
         void *ptr;

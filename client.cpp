@@ -3,7 +3,7 @@
 #include <error.h>
 #include <sys/socket.h>
 #include <string.h>
-using namespace rpr;
+using namespace cfrp;
 #include "config.h"
 
 int main(){

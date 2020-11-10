@@ -3,7 +3,7 @@
 #include "logging.h"
 #include "cfrp.h"
 #include "mber.h"
-using namespace rpr;
+using namespace cfrp;
 #include "config.h"
 
 
