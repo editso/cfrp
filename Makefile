@@ -21,8 +21,11 @@ $(ALL_OBJ): $(OBJ_PATH)/%.o : $(SOURCE_PATH)/%.cpp
 mkpath:
 	mkdir -p $(OBJ_PATH) $(BIN_PATH)
 
-%:all %.cpp
+%:all %.cpp config.h
 	$(CPP) $@.cpp $(ALL_OBJ) -o $(BIN_PATH)/$@ 
+
+config.h:
+	cp $(INCLUDE_PATH)/config.def.h config.h
 
 .PHONY:clean
 clean:

@@ -7,7 +7,7 @@ using namespace rpr;
 #include "config.h"
 
 int main(){
-    Mapper *client = make_client(mapper);
+    Mapper *client = make_client(client_mapper);
     client->start();
     return 0;
 }

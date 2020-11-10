@@ -3,4 +3,5 @@ bin
 cmake-build-debug
 .idea
 .vscode
+config.h
 
