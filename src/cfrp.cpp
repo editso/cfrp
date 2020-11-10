@@ -86,12 +86,12 @@ namespace rpr
         r_sock sock;
         while(1){
             s1 = recv(fd, &msg, sizeof(msg), 0);
-            printf("agent: %d\n", s1);
-            s2 = recv(fd, buff, b_size, 0);
+            s2 = recv(fd, buff, msg.len, 0);
             if(s1 == -1 || s2 == -1  && errno == EAGAIN){
                 break;
             }
             if(s1 == -1 || s2 == -1  && errno == EAGAIN){
+                logger->info("epoll disconnect");
                 epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL);
                 return  -1;
             }
@@ -99,10 +99,10 @@ namespace rpr
                 sock = mappers.at(msg.id);    
             }catch(const std::exception& e){
                 logger->error("no exists, id: " + to_string(msg.id));
-                break;
+                return -1;
             }
            
-            if(send(sock.sockfd, buff, msg.len, 0) < 0){
+            if(msg.len < 0  || send(sock.sockfd, buff, s2, 0) < 0){
                 logger->error("send error");
                 epoll_ctl(efd, EPOLL_CTL_DEL, fd, NULL);
             }
@@ -129,7 +129,7 @@ namespace rpr
             }
             msg.id = id;
             msg.len = s;
-            printf("send: %s, len: %d, fd: %d\n", buff, msg.len, fd);
+            printf("len: %d, fd: %d, errno: %d\n", buff, s, fd, errno);
             memcpy(mbuff, &msg, sizeof(msg));
             memcpy(mbuff + sizeof(msg), buff, s);
             if(send(tfd, mbuff, sizeof(Message) + msg.len, 0) < 0){
@@ -247,7 +247,11 @@ namespace rpr
                             }else{
                                 // receive client message
                                 logger->debug("receive client message");
-                                handle_message(fd, this->mapper.sockfd, this->efd, fd);
+                                if(handle_message(fd, this->mapper.sockfd, this->efd, fd) < 0){
+                                    shutdown(fd, SHUT_RDWR);
+                                }else{
+                                    epoll_ctl(efd, EPOLL_CTL_MOD, fd, &ev);
+                                }
                             }
                         }
                     }
@@ -276,27 +280,6 @@ namespace rpr
                 this->efd = epoll_create(10);
             }
 
-            int read_message(r_sock &sock, Message &message, char *ptr){
-                bzero(&message, sizeof(message));
-                int len;
-                if(recv(sock.sockfd, &message, sizeof(message), 0) < 0){
-                    return -1;
-                }
-                if((len = recv(sock.sockfd, ptr, message.len, 0)) < 0){
-                    return -1;
-                }
-                if(len != message.len){
-                    return -1;
-                }
-                printf("recv: %s\n", ptr);
-                return 1;
-            }
-
-            int handler_message(Message &msg){
-                printf("handler message\n");
-                return 0;
-            }
-
             void start()
             {
 
@@ -316,7 +299,6 @@ namespace rpr
                 {
                     bzero(events, sizeof(events));
                     bzero(&ev, sizeof(ev));
-                    // printf("wait\n");
                     c = epoll_wait(this->efd, events, 5, -1);
                     for (int i = 0; i < c; i++)
                     {
@@ -326,10 +308,10 @@ namespace rpr
                         fd = data->fd;
                         if(fd == this->r_client.sockfd){
                             // receive mapper message
-                            msg = (Message*)malloc(sizeof(Message));
-                            bzero(msg, sizeof(Message));
                             bzero(buff, sizeof(buff));
                             while(1){
+                                msg = (Message*)malloc(sizeof(Message));
+                                bzero(msg, sizeof(Message));
                                 l = recv(fd, msg, sizeof(Message), 0);
                                 if(l == -1 && errno == EAGAIN){
                                     logger->info("recv finish");
@@ -364,7 +346,6 @@ namespace rpr
                                     logger->error("client disconnect");
                                     break;
                                 }
-                                printf("send to proxy, size: %d: %s\n", msg->len, buff);
                                 if(send(sock->sockfd, buff, l, 0) < 0){
                                     perror("send to proxy error");
                                     epoll_ctl(this->efd, EPOLL_CTL_DEL, sock->sockfd, NULL);
@@ -379,7 +360,11 @@ namespace rpr
                             msg = (Message*)data->ptr;
                             // printf("ptr: %d\n", *ev.data.ptr);
                             // printf("id: %d\n", msg->id);
-                            handle_message(fd, this->r_client.sockfd, this->efd, msg->id);
+                            if( handle_message(fd, this->r_client.sockfd, this->efd, msg->id) < 0){
+                                shutdown(fd, SHUT_RDWR);
+                            }else{
+                                epoll_ctl(this->efd, EPOLL_CTL_MOD, fd, &ev);
+                            }
                         }
                     }
                     
