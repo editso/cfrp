@@ -1,0 +1,6 @@
+object
+bin
+cmake-build-debug
+.idea
+.vscode
+
