@@ -18,6 +18,12 @@
 
 #define EPOLL_SIZE 10
 
+/**
+ * 转发消息一次性最大可发送的大小
+*/
+#define CFRP_BUFF_SIZE 1024
+
+
 enum{
     CONNECT = 0x00, // 连接
     DISCONNECT = 0x02, // 断开
@@ -55,8 +61,8 @@ typedef struct{
  * 一个连接链接端信息
 */
 typedef struct{
-    const int port;
-    const char* addr;
+    int port;
+    char* addr;
 } c_peer;
 
 /**
@@ -65,7 +71,7 @@ typedef struct{
 typedef struct
 {
     int sfd;
-    c_peer *peer;
+    c_peer peer;
 } c_sock;
 
 /**
