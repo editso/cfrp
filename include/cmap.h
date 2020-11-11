@@ -2,7 +2,6 @@
 #define __CMAP_H__
 
 
-
 typedef struct{
     int size;
     void **elems;

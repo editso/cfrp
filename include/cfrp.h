@@ -3,24 +3,20 @@
 #include "cmap.h"
 
 
-
+/**
+ * mask pos
+*/
 #define MASK_1 1
-#define MASK_1_0 0
-#define MASK_1_2 1 << 30
-#define MASK_1_3 2 << 30
-
-
 #define MASK_2 2
-
 #define MASK_3 3
-
-
+/**
+ * get mask
+*/
 #define GMASK1(m) m >> 30
-
 #define GMASK2(m) m << 2 >> 26
+#define GMASK3(m) m & ~(~0 << 24)
 
-#define GMASK3(m) m << 8 >> 8
-
+#define EPOLL_SIZE 10
 
 enum{
     CONNECT = 0x00, // 连接
@@ -50,9 +46,9 @@ typedef struct{
      */
     unsigned int mask;
     /**
-     * 数据包
+     * 数据包长度
     */
-    unsigned int size;
+    unsigned int len;
 }cfrp_head;
 
 /**
@@ -68,8 +64,8 @@ typedef struct{
 */
 typedef struct
 {
-    int fd;
-    c_peer peer;
+    int sfd;
+    c_peer *peer;
 } c_sock;
 
 /**
@@ -85,7 +81,19 @@ typedef struct{
      * 1: 连接端 
      * 2: 服务端
     */
-    c_sock sock[3]; 
+    c_sock sock[3];
+    /**
+     * server or client
+    */
+    c_cfrp type;
+    /**
+     * 所有映射信息
+    */
+    cmap mappers;
+    /**
+     * epoll
+     * */ 
+    int efd;
 }cfrp;
 
 
@@ -126,15 +134,15 @@ extern int  cfrp_stop(cfrp*);
 /**
  * 创建一个 tcp服务端
 */
-extern int make_tcp(c_peer peer, c_sock *sock);
+extern int make_tcp(c_peer *peer, c_sock *sock);
 
 /**
  * 创建一个tcp连接端
 */
-extern int make_connect(c_peer peer, c_sock *sock);
+extern int make_connect(c_peer *peer, c_sock *sock);
 
+extern cfrp_head* make_head();
 
 extern unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b);
-
 
 #endif
