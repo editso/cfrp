@@ -23,6 +23,7 @@
 */
 #define CFRP_BUFF_SIZE 1024
 
+#define MAPPER_SIZE 10
 
 enum{
     CONNECT = 0x00, // 连接

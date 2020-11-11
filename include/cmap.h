@@ -3,22 +3,39 @@
 
 
 typedef struct{
+    // map大小
     int size;
-    void **elems;
+    // 容量
+    int capacity;
+    // 最大质数
+    int _prime;
+    // 元素
+    void **_elems;
 }cmap;
+
+
+typedef struct{
+    void* key;
+    void* value;
+}cmap_elem;
+
+
+extern cmap* make_map(int capacity);
 
 /**
  * 添加
 */
-int cmap_put(cmap* map, void* el);
+extern int map_put(cmap* map, void* key, void* value);
 
 /**
  * 删除
 */
-void *cmap_remove(cmap *map, void* key);
+extern void *map_remove(cmap *map, void* key);
 
 /**
  * 获取
 */
-void *cmap_get(cmap *map, void* key);
+extern cmap_elem *map_get(cmap *map, void* key);
+
+extern void *map_set(cmap *map, void* key, void* value);
 #endif

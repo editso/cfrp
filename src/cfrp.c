@@ -181,6 +181,7 @@ unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b){
 extern cfrp* mmake_cfrp(){
     cfrp* frp = (cfrp*)malloc(sizeof(cfrp));
     bzero(frp, sizeof(cfrp));
+    frp->mappers = *make_map(MAPPER_SIZE);
     return frp;
 }
 
@@ -209,7 +210,6 @@ extern cfrp* make_cfrp_server(c_peer peers[]){
         perror("cfrp epoll error");
         exit(0);
     }
-    
     if(EPOLL_ADD(frp, CFRP_LFD(frp), NULL)   < 0 ||
        EPOLL_ADD(frp, CFRP_RFD(frp), NULL)   < 0){
        perror("epoll error");
@@ -227,6 +227,10 @@ extern cfrp* make_cfrp_client(c_peer peers[]){
         setnoblocking(CFRP_LFD(frp))          == CFRP_ERR ){
             perror("cfrp make error");
             exit(1);
+    }
+    if(EPOLL_ADD(frp, CFRP_LFD(frp), NULL) < 0){
+        perror("epoll error");
+        exit(1);
     }
     return frp;
 }
@@ -287,8 +291,25 @@ extern int run_server(cfrp* frp){
 }
 
 
+/**
+ * 启动客户端
+*/
 extern int run_client(cfrp* frp){
-    
+    struct epoll_event events[10], ev;
+    cfrp_epoll_data *data;
+    int cfd = -1, lfd = -1;
+    LISTEN{
+        __DEF_EPOLL_WAIT__(c, frp->efd, events, 5, -1);
+        lfd = CFRP_LFD(frp);
+        HANDLER_EPOLL_EVENT(c, ev, data, events){
+            cfd = data->sfd;
+            if(cfd == lfd){
+                
+            }else{
+                
+            }
+        }
+    }
 }
 
 /**
@@ -315,7 +336,7 @@ extern int  cfrp_run(cfrp* frp){
 /**
  * 停止服务
 */
-extern int  cfrp_stop(cfrp* c_frp){
+extern int  cfrp_stop(cfrp* frp){
 
 }
 
