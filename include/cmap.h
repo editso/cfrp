@@ -1,6 +1,6 @@
 #ifndef __CMAP_H__
 #define __CMAP_H__
-
+#include "clist.h"
 
 typedef struct{
     // map大小
@@ -36,5 +36,16 @@ extern void *map_remove(cmap *map, const void* key);
  * 获取
 */
 extern void *map_get(cmap *map, const void* key);
+
+
+/**
+ * 清空所有数据
+*/
+extern void *map_clear(cmap *map);
+
+/**
+ * 转换为list->[ {key:value} ]
+*/
+extern clist* map_to_list(cmap* map);
 
 #endif

@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #include "cmap.h"
-#include "clist.h"
+
 
 
 extern int get_max_prime(int num);
@@ -119,4 +119,17 @@ extern void *map_get(cmap *map, const void* key){
         }
     }
     return (void*)0;
+}
+
+extern clist* map_to_list(cmap* map){
+    clist* list = make_list();
+    clist* tmp;
+    for(int i = 0; i < map->size; i++){
+        tmp = map->_elems[i];
+        if(!tmp) continue;
+        for(cnode *node = tmp->head; node; node = node->next){
+            list_add(list, node->el);
+        }
+    }
+    return list;
 }

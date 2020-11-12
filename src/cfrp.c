@@ -62,13 +62,17 @@ extern int cfrp_recv_forward(cfrp* frp);
 /**
  * 转发发送的信息
 */
-extern int cfrp_send_forward(cfrp* frp, c_sock *sock);
+extern int cfrp_send_forward(cfrp* frp, char *uuid);
 
 /**
  * 注册监听
 */
 extern char* cfrp_register(cfrp* frp, c_sock* sock);
 
+/**
+ * 取消注册
+*/
+extern char* cfrp_unregister(cfrp* frp, c_sock* sock);
 
 #define CFRP_ERR -1
 #define CFER_SUCC 1
@@ -271,18 +275,22 @@ extern int run_server(cfrp* frp){
     cfrp_epoll_data* data;
     c_sock sock;
     char *uuid = (void*)0;
-    LOG_INFO("server started !\nMapping: [%s:%d]->[%s:%d]", 
+    LOG_INFO("server started !\nMapping: [%s:%d]:%d->[%s:%d]:%d", 
                 frp->sock[1].peer.addr,
                 frp->sock[1].peer.port,
+                frp->sock[1].sfd,
                 frp->sock->peer.addr,
-                frp->sock->peer.port);
+                frp->sock->peer.port,
+                frp->sock->sfd);
     LISTEN{
         __DEF_EPOLL_WAIT__(c, frp->efd, events, 5, -1);
         mfd = frp->sock[2].sfd;
+        bzero(&sock, sizeof(c_sock));
         HANDLER_EPOLL_EVENT(c, ev, data, events){
             cfd  = data->sfd;
             if(cfd == rfd || cfd == lfd){
-                if(cfrp_accept(cfd, &sock) == CFRP_ERR){
+                if( cfrp_accept(cfd, &sock) == CFRP_ERR || 
+                    setnoblocking(sock.sfd) == CFRP_ERR){
                     perror("cfrp accept error");
                     continue;
                 }
@@ -303,15 +311,17 @@ extern int run_server(cfrp* frp){
                      * 注册监听
                     */
                     LOG_INFO("register mapping");
-                    cfrp_register(frp, &sock);
+                    uuid = cfrp_register(frp, &sock);
                 }
                 // 注册监听
                 EPOLL_ADD(frp, sock.sfd, uuid);
             }else{
-                if(cfd == sock.sfd){
+                if(mfd == cfd){
+                    LOG_INFO("recv forward");
                     cfrp_recv_forward(frp);
                 }else{
-                    cfrp_send_forward(frp, &sock);
+                    LOG_INFO("send forward");
+                    cfrp_send_forward(frp, data->ptr);
                 }
             }
             EPOLL_MOD(frp, cfd, &ev);
@@ -333,7 +343,9 @@ extern int run_client(cfrp* frp){
         HANDLER_EPOLL_EVENT(c, ev, data, events){
             cfd = data->sfd;
             if(cfd == lfd){
-                
+                /**
+                 * 服务端传来了数据需要将数据解析然后转发的目标地址
+                */
             }else{
                 
             }
@@ -426,21 +438,26 @@ extern int cfrp_accept(int fd, c_sock* sock){
     bzero(sock,  sizeof(c_sock));
     int afd = -1;
     struct sockaddr_in addr;
-    socklen_t len;
-    if((afd = accept(fd, SOCKADDR(&addr), &len)) < 0){
+    socklen_t len = sizeof(struct sockaddr_in);
+    if((afd = accept(fd, SOCKADDR(&addr), &len)) < 0)
         return CFRP_ERR;
-    }
     SOCK_PEER(&addr, sock->peer); 
     sock->sfd = afd;
     return  CFER_SUCC;
 }
 
 extern int cfrp_close(cfrp* frp, int fd){
+    if(frp->sock[2].sfd == fd){
+        // 需要删除所有监听
+       
+    }
     EPOLL_DEL(frp, fd, NULL);
     if(close(fd) < 0)
         return CFRP_ERR;
     return CFER_SUCC;
 }
+
+
 
 extern int cfrp_recv_forward(cfrp* frp){
     //  头部信息
@@ -509,14 +526,17 @@ extern int cfrp_recv_forward(cfrp* frp){
 }
 
 
-extern int cfrp_send_forward(cfrp* frp, c_sock *sock){
+extern int cfrp_send_forward(cfrp* frp, char* uuid){
     cfrp_head head;
+    c_sock *sock = map_get(&frp->mappers, uuid);
+    LOG_INFO("send->[%s:%d], fd: %d", sock->peer.addr, sock->peer.port, sock->sfd);
     int sfd = sock->sfd, len;
     char msg_buff[CFRP_BUFF_SIZE];
-    head.mask = cfrp_mask(head.mask, 0x00, MASK_1);
+    head.mask = cfrp_mask(head.mask, 0, MASK_1);
     LOOP{
         bzero(msg_buff, sizeof(msg_buff));
         len  = recv(sfd, msg_buff, sizeof(msg_buff), 0);
+        LOG_INFO("size: %d", len);
         if(len == -1 && errno == EAGAIN){
             break;
         }
@@ -524,15 +544,15 @@ extern int cfrp_send_forward(cfrp* frp, c_sock *sock){
             cfrp_close(frp, sfd);
             break;
         }
-
         if(len < sizeof(msg_buff)){
             head.mask = cfrp_mask(head.mask, len, MASK_3);
-            // send((frp->sock + 1)->sfd, );
+            if(send(frp->sock[2].sfd, msg_buff, len, 0) < 0){
+                LOG_ERROR("send error %s", strerror(errno));
+                cfrp_close(frp, frp->sock[2].sfd);
+            };
         }else{
             // 需要扩容
         }
-
-
     }
 }
 
@@ -557,6 +577,7 @@ extern char* cfrp_uuid(unsigned int max){
     return mbuff;
 }
 
+
 extern char* cfrp_register(cfrp* frp, c_sock* sock){
     char* uuid = cfrp_uuid(18);
     while (map_get(&frp->mappers, uuid))
@@ -565,4 +586,9 @@ extern char* cfrp_register(cfrp* frp, c_sock* sock){
     memcpy(msock, sock, sizeof(c_sock));
     map_put(&frp->mappers, uuid, msock);
     return uuid;
+}
+
+
+extern char* cfrp_unregister(cfrp* frp, c_sock* sock){
+
 }
