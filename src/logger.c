@@ -7,5 +7,5 @@ extern void log_out(const char* message, const int level, const char *file,const
     char buff[1024];
     vsnprintf(buff, sizeof(buff), message, arg);
     va_end(arg);
-    printf("%s:%d[%s]: %s\n", file, line,func, message);
+    printf("%s:%d[%s]: %s\n", file, line, func, buff);
 }

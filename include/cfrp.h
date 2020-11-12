@@ -152,4 +152,5 @@ extern cfrp_head* make_head();
 
 extern unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b);
 
+extern char* cfrp_uuid(unsigned int max);
 #endif

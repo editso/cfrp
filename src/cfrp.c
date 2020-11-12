@@ -8,9 +8,16 @@
 #include <unistd.h>
 #include <error.h>
 #include <errno.h>
+#include <time.h>
 
 #include "cfrp.h"
 #include "logger.h"
+
+static const char __BASE_LATTER__[] = {
+    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
+    'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't',
+    'u', 'v', 'w', 'x', 'y', 'z'
+};
 
 /**
  * 创建cfrp
@@ -27,35 +34,40 @@ extern cfrp* make_cfrp_server(c_peer peers[]);
 /**
  * 多路复用
 */
-extern int   make_epoll();
+extern int make_epoll();
 /**
  * 启动服务端
 */
-extern int   run_server(cfrp* frp);
+extern int run_server(cfrp* frp);
 /**
  * 启动客户端
 */
-extern int   run_client(cfrp* frp);
+extern int run_client(cfrp* frp);
 /**
  * 监听socket
 */
-extern int   cfrp_listen(cfrp* frp, int sfd, int op, int events, void* data);
+extern int cfrp_listen(cfrp* frp, int sfd, int op, int events, void* data);
 /**
  * 允许一个连接
 */
-extern int   cfrp_accept(int fd, c_sock* sock);
+extern int cfrp_accept(int fd, c_sock* sock);
 /**
  * 关闭
 */
-extern int   cfrp_close(cfrp* frp, int fd);
+extern int cfrp_close(cfrp* frp, int fd);
 /**
  * 转发接收到的信息
 */
-extern int   cfrp_recv_forward(cfrp* frp);
+extern int cfrp_recv_forward(cfrp* frp);
 /**
  * 转发发送的信息
 */
-extern int   cfrp_send_forward(cfrp* frp, c_sock *sock);
+extern int cfrp_send_forward(cfrp* frp, c_sock *sock);
+
+/**
+ * 注册监听
+*/
+extern char* cfrp_register(cfrp* frp, c_sock* sock);
 
 
 #define CFRP_ERR -1
@@ -258,10 +270,15 @@ extern int run_server(cfrp* frp){
     struct epoll_event events[5], ev;
     cfrp_epoll_data* data;
     c_sock sock;
-    LOG_INFO("server started !");
+    char *uuid = (void*)0;
+    LOG_INFO("server started !\nMapping: [%s:%d]->[%s:%d]", 
+                frp->sock[1].peer.addr,
+                frp->sock[1].peer.port,
+                frp->sock->peer.addr,
+                frp->sock->peer.port);
     LISTEN{
         __DEF_EPOLL_WAIT__(c, frp->efd, events, 5, -1);
-        mfd = (frp->sock + 3)->sfd;
+        mfd = frp->sock[2].sfd;
         HANDLER_EPOLL_EVENT(c, ev, data, events){
             cfd  = data->sfd;
             if(cfd == rfd || cfd == lfd){
@@ -275,9 +292,21 @@ extern int run_server(cfrp* frp){
                     */
                    cfrp_close(frp, sock.sfd);
                    continue;
+                }else if(cfd == lfd){
+                    /**
+                     * 被映射端连接
+                    */
+                    LOG_INFO("client connect");
+                    memcpy(frp->sock + 2, &sock, sizeof(c_sock));
+                }else{
+                    /**
+                     * 注册监听
+                    */
+                    LOG_INFO("register mapping");
+                    cfrp_register(frp, &sock);
                 }
                 // 注册监听
-                EPOLL_ADD(frp, sock.sfd, NULL);
+                EPOLL_ADD(frp, sock.sfd, uuid);
             }else{
                 if(cfd == sock.sfd){
                     cfrp_recv_forward(frp);
@@ -505,4 +534,35 @@ extern int cfrp_send_forward(cfrp* frp, c_sock *sock){
 
 
     }
+}
+
+
+extern char* cfrp_uuid(unsigned int max){
+    max = max < 10 ? 10: max;
+    char buff[max], chr;
+    memset(buff, '\0', sizeof(buff));
+    int i = 0;
+    for(; i < max; i++){
+        if(rand() % 2){
+            chr = __BASE_LATTER__[rand() % 26];
+            chr = rand() %  2 ? chr - 32 : chr;
+            buff[i] = chr;
+        }else{
+            buff[i] = chr = rand() % 9 + '0';
+        }
+    }
+    char* mbuff = malloc(sizeof(chr) * sizeof(buff));
+    memset(mbuff, '\0', sizeof(mbuff));
+    memcpy(mbuff, buff, i);
+    return mbuff;
+}
+
+extern char* cfrp_register(cfrp* frp, c_sock* sock){
+    char* uuid = cfrp_uuid(18);
+    while (map_get(&frp->mappers, uuid))
+        uuid = cfrp_uuid(18);
+    c_sock* msock = malloc(sizeof(c_sock));
+    memcpy(msock, sock, sizeof(c_sock));
+    map_put(&frp->mappers, uuid, msock);
+    return uuid;
 }
