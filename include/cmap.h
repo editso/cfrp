@@ -15,27 +15,29 @@ typedef struct{
 
 
 typedef struct{
-    const void* key;
+    void* key;
     void* value;
 }cmap_elem;
 
+
+extern int map_init(cmap* map, int capacity);
 
 extern cmap* make_map(int capacity);
 
 /**
  * 添加
 */
-extern int map_put(cmap* map, const void* key, void* value);
+extern int map_put(cmap* map, void* key, void* value);
 
 /**
  * 删除
 */
-extern void *map_remove(cmap *map, const void* key);
+extern void *map_remove(cmap *map, void* key);
 
 /**
  * 获取
 */
-extern void *map_get(cmap *map, const void* key);
+extern void *map_get(cmap *map, void* key);
 
 
 /**
@@ -44,8 +46,8 @@ extern void *map_get(cmap *map, const void* key);
 extern void *map_clear(cmap *map);
 
 /**
- * 转换为list->[ {key:value} ]
+ * 获取map所有key
 */
-extern clist* map_to_list(cmap* map);
+extern int map_keys(cmap* map, clist* list);
 
 #endif

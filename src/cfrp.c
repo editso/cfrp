@@ -59,6 +59,7 @@ extern int cfrp_close(cfrp* frp, int fd);
  * 转发接收到的信息
 */
 extern int cfrp_recv_forward(cfrp* frp);
+
 /**
  * 转发发送的信息
 */
@@ -68,11 +69,12 @@ extern int cfrp_send_forward(cfrp* frp, char *uuid);
  * 注册监听
 */
 extern char* cfrp_register(cfrp* frp, c_sock* sock);
-
 /**
  * 取消注册
 */
 extern char* cfrp_unregister(cfrp* frp, c_sock* sock);
+extern char* cfrp_clear_mappers(cfrp* frp);
+
 
 #define CFRP_ERR -1
 #define CFER_SUCC 1
@@ -106,6 +108,7 @@ typedef struct{
     __vname.data.ptr = __data;
     
 #define __DEF_EPOLL_WAIT__(__vname, efd, __events,__max, __timeout) \
+    if(efd == -1) break;\
     int __vname = epoll_wait(efd, __events,  __max, __timeout);
     
 #define EPOLL_ADD(__frp, __sfd, __data) cfrp_listen(__frp, __sfd, EPOLL_CTL_ADD, CFRP_EPOLL_EVENT, __data)
@@ -197,7 +200,7 @@ unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b){
 extern cfrp* mmake_cfrp(){
     cfrp* frp = (cfrp*)malloc(sizeof(cfrp));
     bzero(frp, sizeof(cfrp));
-    frp->mappers = *make_map(MAPPER_SIZE);
+    map_init(&frp->mappers, 20);
     return frp;
 }
 
@@ -212,6 +215,7 @@ extern int make_epoll(){
 */
 extern cfrp* make_cfrp_server(c_peer peers[]){
     cfrp* frp = mmake_cfrp();    
+    memcpy(frp->peers, peers, sizeof(c_peer) * 2);
     if( make_tcp(peers, frp->sock)             == CFRP_ERR || 
         make_tcp((peers + 1), frp->sock + 1)   == CFRP_ERR ){
         perror("cfrp make error");
@@ -239,8 +243,10 @@ extern cfrp* make_cfrp_server(c_peer peers[]){
 */
 extern cfrp* make_cfrp_client(c_peer peers[]){
     cfrp* frp = mmake_cfrp();
-    if( make_connect(peers, frp->sock)         == CFRP_ERR ||
-        setnoblocking(CFRP_LFD(frp))          == CFRP_ERR ){
+    memcpy(frp->peers, peers, sizeof(c_peer) * 2);
+    if( make_connect(peers, frp->sock) == CFRP_ERR ||
+        setnoblocking(CFRP_LFD(frp))   == CFRP_ERR ||
+        (frp->efd = make_epoll())      == CFRP_ERR){
             perror("cfrp make error");
             exit(1);
     }
@@ -304,7 +310,7 @@ extern int run_server(cfrp* frp){
                     /**
                      * 被映射端连接
                     */
-                    LOG_INFO("client connect");
+                    LOG_INFO("client connect: %d", sock.sfd);
                     memcpy(frp->sock + 2, &sock, sizeof(c_sock));
                 }else{
                     /**
@@ -316,19 +322,23 @@ extern int run_server(cfrp* frp){
                 // 注册监听
                 EPOLL_ADD(frp, sock.sfd, uuid);
             }else{
+                int s = CFRP_CONN;
                 if(mfd == cfd){
                     LOG_INFO("recv forward");
-                    cfrp_recv_forward(frp);
+                    s = cfrp_recv_forward(frp);
                 }else{
                     LOG_INFO("send forward");
-                    cfrp_send_forward(frp, data->ptr);
+                    s = cfrp_send_forward(frp, data->ptr);
+                }
+                if(s == CFRP_DISCONNECT || s == CFRP_STOP){
+                    cfrp_close(frp, cfd);
+                    continue;
                 }
             }
-            EPOLL_MOD(frp, cfd, &ev);
+            // EPOLL_MOD(frp, cfd, &ev);
         }
     }
 }
-
 
 /**
  * 启动客户端
@@ -343,15 +353,24 @@ extern int run_client(cfrp* frp){
         HANDLER_EPOLL_EVENT(c, ev, data, events){
             cfd = data->sfd;
             if(cfd == lfd){
+                LOG_INFO("recv server message");
                 /**
                  * 服务端传来了数据需要将数据解析然后转发的目标地址
                 */
+                int s = cfrp_recv_forward(frp);
+                if( s == CFRP_STOP || s == CFRP_DISCONNECT){
+                    cfrp_stop(frp);
+                    break;
+                }
             }else{
-                
+               cfrp_send_forward(frp, data->ptr);
             }
+            LOG_INFO("reset: %d", cfd);
+            EPOLL_MOD(frp, cfd, &ev);
         }
     }
 }
+
 
 /**
  * 启动服务
@@ -361,16 +380,15 @@ extern int  cfrp_run(cfrp* frp){
     if(pid <  0){
         printf("fork child process err");
         exit(1);
-    }else if (pid == 0)
-    {
+    }else if (pid == 0){
         if(frp->type == SERVER){
             run_server(frp);
         }else{
             run_client(frp);
+            exit(0);
         }
-    }else{
-        return pid;
     }
+    return 1;
 }
 
 
@@ -378,7 +396,12 @@ extern int  cfrp_run(cfrp* frp){
  * 停止服务
 */
 extern int  cfrp_stop(cfrp* frp){
-
+    if(frp->type = CLIENT){
+        if(frp->sock)
+            cfrp_close(frp, frp->sock->sfd);
+    }
+    frp->efd = -1;
+    LOG_INFO("cfrp stop, code: %d, message: %s", errno, strerror(errno));
 }
 
 /**
@@ -405,6 +428,8 @@ extern int make_tcp(c_peer *peer, c_sock *sock){
  * 创建一个tcp连接端
 */
 extern int make_connect(c_peer* peer, c_sock *sock){
+    if(! peer) return CFRP_ERR;
+    LOG_INFO("connect: [%s:%d]", peer->addr, peer->port);
     int fd = -1;
     struct sockaddr_in addr = SOCK_ADDR_IN(peer);
     if( (fd = socket(AF_INET, SOCK_STREAM, 0))                < 0 ||
@@ -422,7 +447,6 @@ extern cfrp_head* make_head(){
     bzero(head, sizeof(cfrp_head));
     return head;
 }
-
 
 extern int cfrp_listen(cfrp* frp, int sfd, int op, int events, void* __data){
     cfrp_epoll_data *data  = malloc(sizeof(cfrp_epoll_data));
@@ -447,113 +471,126 @@ extern int cfrp_accept(int fd, c_sock* sock){
 }
 
 extern int cfrp_close(cfrp* frp, int fd){
-    if(frp->sock[2].sfd == fd){
-        // 需要删除所有监听
-       
+    LOG_DEBUG("close connect: fd: %d", fd);
+    if(frp->sock[2].sfd == fd || frp->sock->sfd == fd){
+        cfrp_clear_mappers(frp);
+        if(frp->type == SERVER)
+            bzero(frp->sock + 2, sizeof(c_sock));
+        else if (frp->type == CLIENT)
+            bzero(frp->sock, sizeof(c_sock));
     }
     EPOLL_DEL(frp, fd, NULL);
-    if(close(fd) < 0)
+    if(shutdown(fd, SHUT_RDWR) < 0 || close(fd))
         return CFRP_ERR;
     return CFER_SUCC;
 }
 
-
-
-extern int cfrp_recv_forward(cfrp* frp){
-    //  头部信息
-    cfrp_head head;
-    char msg_buff[CFRP_BUFF_SIZE], key_buff[64];
-    int len = -1, 
-        stat = 0,
-        mfd = (frp->sock + 3)->sfd, 
-        s =  sizeof(head),
-        m1 = 0,
-        m2 = 0,
-        m3 = 0;
+/**
+ * 转发接收到的信息
+*/
+extern int cfrp_recv_forward(cfrp* frp){   
+    cfrp_head head; 
+    char buff[CFRP_BUFF_SIZE], *code;
+    int sfd, tfd, l, hs, cs, st, r;
+    sfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
+    hs = sizeof(cfrp_head); cs = hs, st = 0;
     LOOP{
-        if(stat == 0){
-            bzero(key_buff, s);
-            len = recv(mfd, &head, s, 0); 
-        }else if(stat == 1){
-            bzero(key_buff, sizeof(key_buff));
-            len = recv(mfd, key_buff, m2, 0);
-        }else if(stat == 2){
-            len = recv(mfd, msg_buff, m3, 0);
-        }
-        if(len == -1 && errno == EAGAIN){
+        bzero(buff, CFRP_BUFF_SIZE);
+        l = recv(sfd, buff, cs, 0);
+        LOG_DEBUG("recv size: expected: %d, current: %d, p: %d", cs, l, st);
+        if(l == -1 && errno == EAGAIN){
+            r = CFRP_WAIT;
+            break;
+        }else if(l == 0 && errno == EAGAIN){
+            r = CFRP_DISCONNECT;
             break;
         }
-        if(len == 0 && errno == EAGAIN){
-            printf("disconnect\n");
-            cfrp_close(frp, mfd);
+        if(l != cs){
+            r = CFRP_DISCONNECT;
             break;
         }
-        if(len != s){
-            printf("head length error head: %d, recv: %d", s, len);
-            break;
-        } 
-
-        if(stat == 2){
-            printf("forward message");
-        }
-
-        if(stat == 0){
-            m1 = GMASK1(head.mask);
-            m2 = GMASK1(head.mask);
-            m3 = GMASK3(head.mask);
-            if(m1 != 0x00){
-                printf("head err\n");
-                cfrp_close(frp, mfd);
+        if(st == 0){
+            memcpy(&head, buff, cs);
+            if(GMASK1(head.mask) != 0){
+                LOG_DEBUG("head err");
+                r = CFRP_DISCONNECT;
+                break;
             }
-            if(m2 < 0){
-                printf("no unique\n");
-                cfrp_close(frp, mfd);
-            }else{
-                stat++;
-                s = m2;
+            cs = GMASK2(head.mask);
+            if(cs == 0) {
+                cs = GMASK3(head.mask);
+                st++;
             }
-        }else if(stat == 1){
-            stat++;
-            s = m3;
-        }else if(stat == 2){
-            stat = 0;
-            s = sizeof(head);
+            st++;
+        }else if(st == 1){
+            LOG_DEBUG("code: %s", buff);
+            code = malloc(sizeof(char) * l);
+            memcpy(code, buff, l);
+            cs = GMASK3(head.mask);
+            st++;
+        }else{
+            // forward
+            LOG_DEBUG("recv body: %s", buff);
+            c_sock* sock = map_get(&frp->mappers, code);
+            if(frp->type == CLIENT && !sock){
+                sock = malloc(sizeof(c_sock));
+                if( make_connect(frp->peers + 1, sock) != CFRP_ERR ||
+                    setnoblocking(sock->sfd) != CFRP_ERR){
+                    EPOLL_ADD(frp, sock->sfd, code);
+                    map_put(&frp->mappers, code, sock);
+                }else{
+                    free(sock);
+                    sock = (void*)0;
+                }
+            }
+            if(!sock || send(sock->sfd, buff, l, 0) < 0){
+                r = CFRP_DISCONNECT;
+                break;
+            }
+            LOG_DEBUG("forward success");
+            st = 0;
+            cs = hs;
+            r = CFRP_CONN;
+            bzero(&head, hs);
         }
-
     }
-
-
+    return r;
 }
 
 
 extern int cfrp_send_forward(cfrp* frp, char* uuid){
     cfrp_head head;
-    c_sock *sock = map_get(&frp->mappers, uuid);
-    LOG_INFO("send->[%s:%d], fd: %d", sock->peer.addr, sock->peer.port, sock->sfd);
-    int sfd = sock->sfd, len;
-    char msg_buff[CFRP_BUFF_SIZE];
-    head.mask = cfrp_mask(head.mask, 0, MASK_1);
+    c_sock* sock = map_get(&frp->mappers, uuid);
+    char buff[CFRP_BUFF_SIZE];
+    int hs, bs, sfd, tfd, l, r, ul;
+    hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); ul = strlen(uuid); 
+    tfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     LOOP{
-        bzero(msg_buff, sizeof(msg_buff));
-        len  = recv(sfd, msg_buff, sizeof(msg_buff), 0);
-        LOG_INFO("size: %d", len);
-        if(len == -1 && errno == EAGAIN){
+        bzero(&head, hs);
+        bzero(buff, bs);
+        l = recv(sfd, buff, bs, 0);
+        if( l == -1 && errno == EAGAIN){
+            r = CFRP_WAIT;
+            break;
+        }else if(l == 0 && errno == EAGAIN){
+            r = CFRP_DISCONNECT;
             break;
         }
-        if(len == 0 && errno ==  EAGAIN){
-            cfrp_close(frp, sfd);
+        head.mask = cfrp_mask(head.mask, 0, MASK_1);
+        head.mask = cfrp_mask(head.mask, ul, MASK_2);
+        head.mask = cfrp_mask(head.mask, l, MASK_3);
+        char sbuff[l + hs + ul];
+        memcpy(sbuff, &head, hs);
+        memcpy(sbuff + hs, uuid, ul);
+        memcpy(sbuff + hs + ul, buff, l);
+        LOG_DEBUG("forward size: head: %d, body: %d, sum: %d", hs, l, hs + l + ul);
+        if(send(tfd, sbuff, l + hs + ul, 0) < 0){
+            r = CFRP_DISCONNECT;
             break;
         }
-        if(len < sizeof(msg_buff)){
-            head.mask = cfrp_mask(head.mask, len, MASK_3);
-            if(send(frp->sock[2].sfd, msg_buff, len, 0) < 0){
-                LOG_ERROR("send error %s", strerror(errno));
-                cfrp_close(frp, frp->sock[2].sfd);
-            };
-        }else{
-            // 需要扩容
-        }
+        LOG_DEBUG("forward success");
     }
+    return r;
 }
 
 
@@ -577,7 +614,6 @@ extern char* cfrp_uuid(unsigned int max){
     return mbuff;
 }
 
-
 extern char* cfrp_register(cfrp* frp, c_sock* sock){
     char* uuid = cfrp_uuid(18);
     while (map_get(&frp->mappers, uuid))
@@ -588,7 +624,15 @@ extern char* cfrp_register(cfrp* frp, c_sock* sock){
     return uuid;
 }
 
-
-extern char* cfrp_unregister(cfrp* frp, c_sock* sock){
-
+extern char* cfrp_clear_mappers(cfrp* frp){
+    clist list;
+    bzero(&list, sizeof(clist));
+    map_keys(&frp->mappers, &list);
+    c_sock *sock;
+    for(int i = 0; i < list.size; i++){
+        sock = map_remove(&frp->mappers, list_get(&list, i));
+        if(! sock)continue;
+        cfrp_close(frp, sock->sfd);
+        free(sock);
+    }
 }

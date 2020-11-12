@@ -25,6 +25,15 @@
 
 #define MAPPER_SIZE 10
 
+#define CFRP_WAIT 1;
+
+#define CFRP_DISCONNECT 2
+
+#define CFRP_STOP 3
+
+#define CFRP_CONN 4
+
+
 enum{
     CONNECT = 0x00, // 连接
     DISCONNECT = 0x02, // 断开

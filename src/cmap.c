@@ -8,13 +8,13 @@
 
 extern int get_max_prime(int num);
 
-extern unsigned long map_hash(cmap* map, const void* key);
+extern unsigned long map_hash(cmap* map, void* key);
 
-extern int map_hash_fun(cmap* map, const void *key);
+extern int map_hash_fun(cmap* map, void *key);
 
-extern cmap_elem* make_map_elem(const void* key, void* value);
+extern cmap_elem* make_map_elem(void* key, void* value);
 
-extern cmap_elem* make_map_elem(const void* key, void* value){
+extern cmap_elem* make_map_elem(void* key, void* value){
     cmap_elem *el = malloc(sizeof(cmap_elem));
     el->key = key;
     el->value = value;
@@ -22,12 +22,12 @@ extern cmap_elem* make_map_elem(const void* key, void* value){
 }
 
 
-unsigned long map_hash(cmap* map, const void* key){
-    return (key ? (unsigned long)key : 0);
+unsigned long map_hash(cmap* map, void* key){
+    return (key ? (int long)key : 2);
 }
 
 
-int map_hash_fun(cmap* map, const void* key){
+int map_hash_fun(cmap* map, void* key){
     return map_hash(map,  key) % map->_prime; 
 }
 
@@ -42,22 +42,26 @@ extern int get_max_prime(int num){
     return 2;
 }
 
-
-cmap* make_map(int capacity){
+extern cmap* make_map(int capacity){
     capacity = capacity < 2 ? 2 : capacity;
     cmap* map = malloc(sizeof(cmap));
+    map_init(map, capacity);
+    return map;
+}
+
+extern int map_init(cmap* map, int capacity){
+    if(! map)return -1;
     bzero(map, sizeof(cmap));
     map->capacity = capacity;
     map->_elems = malloc( sizeof(clist) * capacity);
     map->_prime = get_max_prime(capacity);
-    return map;
+    bzero(map->_elems, sizeof(sizeof(clist) * capacity));
 }
-
 
 /**
  * 添加
 */
-extern int map_put(cmap* map, const void* key, void* value){
+extern int map_put(cmap* map, void* key, void* value){
     int index = map_hash_fun(map, key);
     unsigned long hash = map_hash(map, key);
     clist *list = map->_elems[index];
@@ -75,10 +79,11 @@ extern int map_put(cmap* map, const void* key, void* value){
     return 1;
 }
 
+
 /**
  * 删除
 */
-extern void *map_remove(cmap *map, const void* key){
+extern void *map_remove(cmap *map, void* key){
     unsigned long hash = map_hash(map, key);
     clist* list = map->_elems[ map_hash_fun(map, key) ];
     if( ! list) return (void*)0;
@@ -107,7 +112,7 @@ extern void *map_remove(cmap *map, const void* key){
 /**
  * 获取
 */
-extern void *map_get(cmap *map, const void* key){
+extern void *map_get(cmap *map, void* key){
     unsigned long hash = map_hash(map, key);
     clist *list = map->_elems[ map_hash_fun(map, key) ];
     if( ! list) return (void *)0;
@@ -121,15 +126,18 @@ extern void *map_get(cmap *map, const void* key){
     return (void*)0;
 }
 
-extern clist* map_to_list(cmap* map){
-    clist* list = make_list();
-    clist* tmp;
-    for(int i = 0; i < map->size; i++){
+
+extern int map_keys(cmap* map, clist* list){
+    if(! list) return 0;
+    clist* tmp = (void*)0;
+    cmap_elem *el;
+    for(int i = 0; i < map->capacity; i++){
         tmp = map->_elems[i];
-        if(!tmp) continue;
+        if(! tmp) continue;
         for(cnode *node = tmp->head; node; node = node->next){
-            list_add(list, node->el);
+            el = node->el;
+            list_add(list, el->key);
         }
     }
-    return list;
+    return 1;
 }
