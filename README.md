@@ -7,6 +7,6 @@
 
 运行服务  
 `cd bin`  
-`./server`  
-`./client`
+`./server:` 服务端  
+`./client:` 客户端
 
