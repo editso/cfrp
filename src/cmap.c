@@ -23,7 +23,7 @@ extern cmap_elem* make_map_elem(void* key, void* value){
 
 
 unsigned long map_hash(cmap* map, void* key){
-    return (key ? (int long)key : 2);
+    return (key ? (unsigned long)atol(key) : 2);
 }
 
 

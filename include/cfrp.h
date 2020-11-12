@@ -33,6 +33,8 @@
 
 #define CFRP_CONN 4
 
+#define CFRP_DISMAPPER 5
+
 
 enum{
     CONNECT = 0x00, // 连接

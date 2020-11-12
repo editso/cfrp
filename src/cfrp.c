@@ -335,7 +335,7 @@ extern int run_server(cfrp* frp){
                     continue;
                 }
             }
-            // EPOLL_MOD(frp, cfd, &ev);
+            EPOLL_MOD(frp, cfd, &ev);
         }
     }
 }
@@ -352,21 +352,25 @@ extern int run_client(cfrp* frp){
         lfd = CFRP_LFD(frp);
         HANDLER_EPOLL_EVENT(c, ev, data, events){
             cfd = data->sfd;
+            int s;
             if(cfd == lfd){
                 LOG_INFO("recv server message");
                 /**
                  * 服务端传来了数据需要将数据解析然后转发的目标地址
                 */
-                int s = cfrp_recv_forward(frp);
-                if( s == CFRP_STOP || s == CFRP_DISCONNECT){
-                    cfrp_stop(frp);
-                    break;
-                }
+                s = cfrp_recv_forward(frp);
             }else{
-               cfrp_send_forward(frp, data->ptr);
+                s = cfrp_send_forward(frp, data->ptr);
             }
-            LOG_INFO("reset: %d", cfd);
-            EPOLL_MOD(frp, cfd, &ev);
+            if( s == CFRP_STOP || s == CFRP_DISCONNECT){
+                cfrp_stop(frp);
+                break;
+            }else if(s == CFRP_DISCONNECT){
+                cfrp_close(frp, cfd);
+                free(map_remove(&frp->mappers, data->ptr));
+            }else{
+                EPOLL_MOD(frp, cfd, &ev);
+            }
         }
     }
 }
@@ -529,12 +533,10 @@ extern int cfrp_recv_forward(cfrp* frp){
             cs = GMASK3(head.mask);
             st++;
         }else{
-            // forward
-            LOG_DEBUG("recv body: %s", buff);
             c_sock* sock = map_get(&frp->mappers, code);
             if(frp->type == CLIENT && !sock){
                 sock = malloc(sizeof(c_sock));
-                if( make_connect(frp->peers + 1, sock) != CFRP_ERR ||
+                if( make_connect(frp->peers + 1, sock) != CFRP_ERR &&
                     setnoblocking(sock->sfd) != CFRP_ERR){
                     EPOLL_ADD(frp, sock->sfd, code);
                     map_put(&frp->mappers, code, sock);
@@ -543,9 +545,9 @@ extern int cfrp_recv_forward(cfrp* frp){
                     sock = (void*)0;
                 }
             }
+            LOG_DEBUG("forward: [%s:%d], fd: %d", sock->peer.addr, sock->peer.port, sock->sfd);
             if(!sock || send(sock->sfd, buff, l, 0) < 0){
-                r = CFRP_DISCONNECT;
-                break;
+                r = CFRP_DISMAPPER;
             }
             LOG_DEBUG("forward success");
             st = 0;
@@ -588,8 +590,9 @@ extern int cfrp_send_forward(cfrp* frp, char* uuid){
             r = CFRP_DISCONNECT;
             break;
         }
-        LOG_DEBUG("forward success");
+        
     }
+    LOG_DEBUG("forward success");
     return r;
 }
 
