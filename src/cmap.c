@@ -96,7 +96,6 @@ extern void *map_remove(cmap *map, void* key){
                 node->prev->next = node->next;
             }else{
                 list->head = node->next;
-                list->tail = list->head;
             }
             if(node->next){
                 node->next->prev = node->prev;
