@@ -495,7 +495,7 @@ extern int cfrp_close(cfrp* frp, int fd){
 extern int cfrp_recv_forward(cfrp* frp){   
     cfrp_head head; 
     char buff[CFRP_BUFF_SIZE], *code;
-    int sfd, tfd, l, hs, cs, st, r;
+    int sfd, tfd, l, hs, cs, st, r, sl;
     sfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     hs = sizeof(cfrp_head); cs = hs, st = 0;
     LOOP{
@@ -546,10 +546,11 @@ extern int cfrp_recv_forward(cfrp* frp){
                 }
             }
             LOG_DEBUG("forward: [%s:%d], fd: %d", sock->peer.addr, sock->peer.port, sock->sfd);
-            if(!sock || send(sock->sfd, buff, l, 0) < 0){
+            if(!sock || (sl = send(sock->sfd, buff, l, 0)) < 0){
                 r = CFRP_DISMAPPER;
+                break;
             }
-            LOG_DEBUG("forward success");
+            LOG_DEBUG("send: total: %d, current: %d", l, sl);
             st = 0;
             cs = hs;
             r = CFRP_CONN;
@@ -563,7 +564,7 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
     cfrp_head head;
     c_sock* sock = map_get(&frp->mappers, code);
     char buff[CFRP_BUFF_SIZE];
-    int hs, bs, sfd, tfd, l, r, ul;
+    int hs, bs, sfd, tfd, l, r, ul, sl;
     hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); ul = strlen(code); 
     tfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     LOOP{
@@ -585,11 +586,12 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
         memcpy(sbuff, &head, hs);
         memcpy(sbuff + hs, code, ul);
         memcpy(sbuff + hs + ul, buff, l);
-        LOG_DEBUG("forward size: head: %d, body: %d, sum: %d", hs, l, hs + l + ul);
-        if(send(tfd, sbuff, l + hs + ul, 0) < 0){
+        LOG_DEBUG("forward size: head: %d, body: %d, total: %d", hs, l, hs + l + ul);
+        if((sl = send(tfd, sbuff, l + hs + ul, 0)) < 0){
             r = CFRP_DISCONNECT;
             break;
         }
+        LOG_DEBUG("send: total: %d, current: %d", hs + l + ul, sl);
     }
     if(r == CFER_SUCC)
         LOG_INFO("forward success");
