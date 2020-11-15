@@ -359,13 +359,12 @@ extern int run_client(cfrp* frp){
                 /**
                  * 服务端传来了数据需要将数据解析然后转发的目标地址
                 */
-                s = cfrp_recv_forward(frp);
+                s = cfrp_recv_forward(frp) != CFER_SUCC ? CFRP_STOP : CFER_SUCC;
             }else{
                 s = cfrp_send_forward(frp, data->ptr);
             }
             if( s == CFRP_STOP){
                 cfrp_stop(frp);
-                break;
             }else if(s == CFRP_DISCONNECT){
                 cfrp_close(frp, cfd);
                 free(map_remove(&frp->mappers, data->ptr));
@@ -390,8 +389,8 @@ extern int  cfrp_run(cfrp* frp){
             run_server(frp);
         }else{
             run_client(frp);
-            exit(0);
         }
+        exit(0);
     }
     return 1;
 }
@@ -434,7 +433,6 @@ extern int make_tcp(c_peer *peer, c_sock *sock){
 */
 extern int make_connect(c_peer* peer, c_sock *sock){
     if(! peer) return CFRP_ERR;
-    LOG_INFO("connect: [%s:%d]", peer->addr, peer->port);
     int fd = -1;
     struct sockaddr_in addr = SOCK_ADDR_IN(peer);
     if( (fd = socket(AF_INET, SOCK_STREAM, 0))                < 0 ||
@@ -444,6 +442,7 @@ extern int make_connect(c_peer* peer, c_sock *sock){
     sock->sfd = fd;
     sock->peer.addr = peer->addr;
     sock->peer.port = peer->port;
+    LOG_INFO("connected: [%s:%d], fd: %d", peer->addr, peer->port, fd);
     return fd;
 }
 
@@ -568,6 +567,7 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
     hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); ul = strlen(code); 
     tfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     LOOP{
+        r = CFER_SUCC;
         bzero(&head, hs);
         bzero(buff, bs);
         l = recv(sfd, buff, bs, 0);
@@ -591,7 +591,10 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
             break;
         }
     }
-    LOG_DEBUG("forward success");
+    if(r == CFER_SUCC)
+        LOG_INFO("forward success");
+    else
+        LOG_ERROR("forward error, code: %d, message: %s", errno, strerror(errno));
     return r;
 }
 
@@ -625,6 +628,7 @@ extern char* cfrp_register(cfrp* frp, c_sock* sock){
     return uuid;
 }
 
+
 extern char* cfrp_clear_mappers(cfrp* frp){
     clist list;
     bzero(&list, sizeof(clist));
@@ -632,7 +636,7 @@ extern char* cfrp_clear_mappers(cfrp* frp){
     c_sock *sock;
     for(int i = 0; i < list.size; i++){
         sock = map_remove(&frp->mappers, list_get(&list, i));
-        if(! sock)continue;
+        if(!sock) continue;
         cfrp_close(frp, sock->sfd);
         free(sock);
     }

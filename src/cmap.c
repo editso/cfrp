@@ -84,6 +84,7 @@ extern int map_put(cmap* map, void* key, void* value){
  * 删除
 */
 extern void *map_remove(cmap *map, void* key){
+    if(! key) return (void*)0;
     unsigned long hash = map_hash(map, key);
     clist* list = map->_elems[ map_hash_fun(map, key) ];
     if( ! list) return (void*)0;
@@ -94,7 +95,8 @@ extern void *map_remove(cmap *map, void* key){
             if(node->prev){
                 node->prev->next = node->next;
             }else{
-                list->tail = node->next;
+                list->head = node->next;
+                list->tail = list->head;
             }
             if(node->next){
                 node->next->prev = node->prev;
