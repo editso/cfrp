@@ -64,7 +64,7 @@ extern int cfrp_recv_forward(cfrp* frp);
 /**
  * 转发发送的信息
 */
-extern int cfrp_send_forward(cfrp* frp, char *uuid);
+extern int cfrp_send_forward(cfrp* frp, char *code);
 
 /**
  * 注册监听
@@ -281,7 +281,7 @@ extern int run_server(cfrp* frp){
     struct epoll_event events[5], ev;
     cfrp_epoll_data* data;
     c_sock sock;
-    char *uuid = (void*)0;
+    char *code = (void*)0;
     LOG_INFO("server started !\nMapping: [%s:%d]:%d->[%s:%d]:%d", 
                 frp->sock[1].peer.addr,
                 frp->sock[1].peer.port,
@@ -318,10 +318,10 @@ extern int run_server(cfrp* frp){
                      * 注册监听
                     */
                     LOG_INFO("register mapping");
-                    uuid = cfrp_register(frp, &sock);
+                    code = cfrp_register(frp, &sock);
                 }
                 // 注册监听
-                EPOLL_ADD(frp, sock.sfd, uuid);
+                EPOLL_ADD(frp, sock.sfd, code);
             }else{
                 int s = CFRP_CONN;
                 if(mfd == cfd){
@@ -560,12 +560,12 @@ extern int cfrp_recv_forward(cfrp* frp){
     return r;
 }
 
-extern int cfrp_send_forward(cfrp* frp, char* uuid){
+extern int cfrp_send_forward(cfrp* frp, char* code){
     cfrp_head head;
-    c_sock* sock = map_get(&frp->mappers, uuid);
+    c_sock* sock = map_get(&frp->mappers, code);
     char buff[CFRP_BUFF_SIZE];
     int hs, bs, sfd, tfd, l, r, ul;
-    hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); ul = strlen(uuid); 
+    hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); ul = strlen(code); 
     tfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     LOOP{
         bzero(&head, hs);
@@ -583,7 +583,7 @@ extern int cfrp_send_forward(cfrp* frp, char* uuid){
         head.mask = cfrp_mask(head.mask, l, MASK_3);
         char sbuff[l + hs + ul];
         memcpy(sbuff, &head, hs);
-        memcpy(sbuff + hs, uuid, ul);
+        memcpy(sbuff + hs, code, ul);
         memcpy(sbuff + hs + ul, buff, l);
         LOG_DEBUG("forward size: head: %d, body: %d, sum: %d", hs, l, hs + l + ul);
         if(send(tfd, sbuff, l + hs + ul, 0) < 0){
@@ -595,7 +595,7 @@ extern int cfrp_send_forward(cfrp* frp, char* uuid){
     return r;
 }
 
-extern char* cfrp_uuid(unsigned int max){
+extern char* cfrp_order(unsigned int max){
     max = max < 10 ? 10: max;
     char buff[max], chr;
     memset(buff, '\0', sizeof(buff));
@@ -616,9 +616,9 @@ extern char* cfrp_uuid(unsigned int max){
 }
 
 extern char* cfrp_register(cfrp* frp, c_sock* sock){
-    char* uuid = cfrp_uuid(18);
+    char* uuid = cfrp_order(18);
     while (map_get(&frp->mappers, uuid))
-        uuid = cfrp_uuid(18);
+        uuid = cfrp_order(18);
     c_sock* msock = malloc(sizeof(c_sock));
     memcpy(msock, sock, sizeof(c_sock));
     map_put(&frp->mappers, uuid, msock);

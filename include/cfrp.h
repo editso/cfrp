@@ -21,7 +21,7 @@
 /**
  * 转发消息一次性最大可发送的大小
 */
-#define CFRP_BUFF_SIZE 1024
+#define CFRP_BUFF_SIZE 1024 * 1024
 
 #define MAPPER_SIZE 10
 
@@ -163,5 +163,5 @@ extern cfrp_head* make_head();
 
 extern unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b);
 
-extern char* cfrp_uuid(unsigned int max);
+extern char* cfrp_order(unsigned int max);
 #endif
