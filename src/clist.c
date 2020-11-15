@@ -7,7 +7,6 @@
 extern cnode* make_node(void* el);
 extern cnode* get_node(clist* list, int index);
 
-
 extern cnode* get_node(clist* list, int index){
     if(index < 0 ||  index >= list->size) return (void *)0;
     int i = 0;

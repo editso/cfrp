@@ -23,6 +23,7 @@ static const char __BASE_LATTER__[] = {
  * 创建cfrp
 */
 extern cfrp* mmake_cfrp();
+
 /**
  * cfrp连接端
 */
@@ -362,7 +363,7 @@ extern int run_client(cfrp* frp){
             }else{
                 s = cfrp_send_forward(frp, data->ptr);
             }
-            if( s == CFRP_STOP || s == CFRP_DISCONNECT){
+            if( s == CFRP_STOP){
                 cfrp_stop(frp);
                 break;
             }else if(s == CFRP_DISCONNECT){
@@ -559,7 +560,6 @@ extern int cfrp_recv_forward(cfrp* frp){
     return r;
 }
 
-
 extern int cfrp_send_forward(cfrp* frp, char* uuid){
     cfrp_head head;
     c_sock* sock = map_get(&frp->mappers, uuid);
@@ -590,12 +590,10 @@ extern int cfrp_send_forward(cfrp* frp, char* uuid){
             r = CFRP_DISCONNECT;
             break;
         }
-        
     }
     LOG_DEBUG("forward success");
     return r;
 }
-
 
 extern char* cfrp_uuid(unsigned int max){
     max = max < 10 ? 10: max;

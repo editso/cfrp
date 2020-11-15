@@ -14,7 +14,6 @@ typedef struct{
     cnode* tail;
 }clist;
 
-
 extern clist* make_list();
 
 extern int list_add(clist* list, void* el);
