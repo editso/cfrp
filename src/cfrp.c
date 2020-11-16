@@ -521,7 +521,7 @@ extern int cfrp_recv_forward(cfrp* frp){
             // break;
             offset += l;
             cs = cs - l;
-            continue;
+            break;
         }
         if(st == 0){
             memcpy(&head, buff, cs);
