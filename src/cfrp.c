@@ -515,8 +515,9 @@ extern int cfrp_recv_forward(cfrp* frp){
         }
         if(l != cs){
             r = CFRP_DISCONNECT;
-            // 获取丢失的包
+            // 网络原因
             LOG_INFO("lost packet: %d", cs - l);
+            
             break;
         }
         if(st == 0){
@@ -593,7 +594,7 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
         HEAD_MASK(&head, 0x01, MASK_1);
         HEAD_MASK(&head, cl, MASK_2);
         HEAD_MASK(&head, l, MASK_3);
-        total = l + hs + cl;
+        total = l + hs;
         char sbuff[total];
         memcpy(sbuff, &head, hs);
         memcpy(sbuff + hs, code, cl);
