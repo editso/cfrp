@@ -499,12 +499,13 @@ extern int cfrp_close(cfrp* frp, int fd){
 extern int cfrp_recv_forward(cfrp* frp){   
     cfrp_head head; 
     char buff[CFRP_BUFF_SIZE], *code;
-    int sfd, tfd, l, hs, cs, st, r, sl, m;
+    int sfd, tfd, l, hs, cs, st, r, sl, m, offset;
     sfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     hs = sizeof(cfrp_head); cs = hs, st = 0;
+    offset = 0;
     LOOP{
         bzero(buff, CFRP_BUFF_SIZE);
-        l = recv(sfd, buff, cs, 0);
+        l = recv(sfd, buff + offset, cs, 0);
         LOG_DEBUG("recv size: expected: %d, current: %d, p: %d", cs, l, st);
         if(l == -1 && errno == EAGAIN){
             r = CFRP_WAIT;
@@ -514,11 +515,13 @@ extern int cfrp_recv_forward(cfrp* frp){
             break;
         }
         if(l != cs){
-            r = CFRP_DISCONNECT;
+            // r = CFRP_DISCONNECT;
             // 网络原因
             LOG_INFO("lost packet: %d", cs - l);
-            
-            break;
+            // break;
+            offset += l;
+            cs = cs - l;
+            continue;
         }
         if(st == 0){
             memcpy(&head, buff, cs);
@@ -594,7 +597,7 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
         HEAD_MASK(&head, 0x01, MASK_1);
         HEAD_MASK(&head, cl, MASK_2);
         HEAD_MASK(&head, l, MASK_3);
-        total = l + hs;
+        total = l + hs + cl;
         char sbuff[total];
         memcpy(sbuff, &head, hs);
         memcpy(sbuff + hs, code, cl);
