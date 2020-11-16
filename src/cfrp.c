@@ -142,6 +142,9 @@ typedef struct{
 #define CFRP_LFD(frp) frp->sock->sfd
 
 
+#define HEAD_MASK(__head, v, p) (__head)->mask = cfrp_mask((__head)->mask, v, p) 
+
+
 /**
  * 设置非阻塞IO
 */
@@ -257,6 +260,7 @@ extern cfrp* make_cfrp_client(c_peer peers[]){
     }
     return frp;
 }
+
 
 /**
  * 创建一个cfrp
@@ -495,7 +499,7 @@ extern int cfrp_close(cfrp* frp, int fd){
 extern int cfrp_recv_forward(cfrp* frp){   
     cfrp_head head; 
     char buff[CFRP_BUFF_SIZE], *code;
-    int sfd, tfd, l, hs, cs, st, r, sl;
+    int sfd, tfd, l, hs, cs, st, r, sl, m;
     sfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     hs = sizeof(cfrp_head); cs = hs, st = 0;
     LOOP{
@@ -511,11 +515,13 @@ extern int cfrp_recv_forward(cfrp* frp){
         }
         if(l != cs){
             r = CFRP_DISCONNECT;
+            // 获取丢失的包
             break;
         }
         if(st == 0){
             memcpy(&head, buff, cs);
-            if(GMASK1(head.mask) != 0){
+            m = GMASK1(head.mask);
+            if(m == 0x00){
                 LOG_DEBUG("head err");
                 r = CFRP_DISCONNECT;
                 break;
@@ -564,8 +570,8 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
     cfrp_head head;
     c_sock* sock = map_get(&frp->mappers, code);
     char buff[CFRP_BUFF_SIZE];
-    int hs, bs, sfd, tfd, l, r, ul, sl;
-    hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); ul = strlen(code); 
+    int hs, bs, sfd, tfd, l, r, cl, sl, total;
+    hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); cl = strlen(code); 
     tfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     LOOP{
         r = CFER_SUCC;
@@ -579,19 +585,24 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
             r = CFRP_DISCONNECT;
             break;
         }
-        head.mask = cfrp_mask(head.mask, 0, MASK_1);
-        head.mask = cfrp_mask(head.mask, ul, MASK_2);
-        head.mask = cfrp_mask(head.mask, l, MASK_3);
-        char sbuff[l + hs + ul];
+
+        // head.mask = cfrp_mask(head.mask, 0x01, MASK_1);
+        // head.mask = cfrp_mask(head.mask, ul, MASK_2);
+        // head.mask = cfrp_mask(head.mask, l, MASK_3);
+        HEAD_MASK(&head, 0x01, MASK_1);
+        HEAD_MASK(&head, cl, MASK_2);
+        HEAD_MASK(&head, l, MASK_3);
+        total = l + hs + cl;
+        char sbuff[total];
         memcpy(sbuff, &head, hs);
-        memcpy(sbuff + hs, code, ul);
-        memcpy(sbuff + hs + ul, buff, l);
-        LOG_DEBUG("forward size: head: %d, body: %d, total: %d", hs, l, hs + l + ul);
-        if((sl = send(tfd, sbuff, l + hs + ul, 0)) < 0){
+        memcpy(sbuff + hs, code, cl);
+        memcpy(sbuff + hs + cl, buff, l);
+        LOG_DEBUG("forward size: head: %d, body: %d, total: %d", hs, l, total);
+        if((sl = send(tfd, sbuff, total, 0)) < 0){
             r = CFRP_DISCONNECT;
             break;
         }
-        LOG_DEBUG("send: total: %d, current: %d", hs + l + ul, sl);
+        LOG_DEBUG("send: total: %d, current: %d", total, sl);
     }
     if(r == CFER_SUCC)
         LOG_INFO("forward success");
@@ -599,6 +610,7 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
         LOG_ERROR("forward error, code: %d, message: %s", errno, strerror(errno));
     return r;
 }
+
 
 extern char* cfrp_order(unsigned int max){
     max = max < 10 ? 10: max;
@@ -629,7 +641,6 @@ extern char* cfrp_register(cfrp* frp, c_sock* sock){
     map_put(&frp->mappers, uuid, msock);
     return uuid;
 }
-
 
 extern char* cfrp_clear_mappers(cfrp* frp){
     clist list;

@@ -4,5 +4,6 @@ cmake-build-debug
 .idea
 .vscode
 config.h
+test.c
 **/*.bak
 

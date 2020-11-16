@@ -1,6 +1,7 @@
 #ifndef __CFRP_H__
 #define __CFRP_H__
 #include "cmap.h"
+#include "cqueue.h"
 
 
 /**
@@ -54,19 +55,20 @@ typedef struct{
     /**
      * 类型
      * 1100000 0000000 0000000 0000000
-     * 0x01 
-     * 0x02
-     * 0x03
+     * 0x00: 关闭连接
+     * 0x01: 常规发送
+     * 0x02: 断点续传
+     * 0x03: 预留
      * 校验信息长度
      * 00111111 0000000 0000000 0000000
-     * 本次服务唯一长度
+     * 本次服务长度
      * 00000000 0000000 0000000 1111111
      */
     unsigned int mask;
     /**
-     * 数据包长度
+     * 偏移
     */
-    unsigned int len;
+    unsigned int offset;
 }cfrp_head;
 
 /**
@@ -81,8 +83,12 @@ typedef struct{
  * 当socket 连接成功时包含的信息
 */
 typedef struct
-{
+{   
     int sfd;
+    /**
+     * 在每次发送数据包时,发送的数据将被记住
+    */
+    cqueue mem;
     c_peer peer;
 } c_sock;
 
