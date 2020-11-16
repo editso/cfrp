@@ -514,7 +514,7 @@ extern int cfrp_recv_forward(cfrp* frp){
             break;
         }
         if(l != cs){
-            r = CFRP_DISCONNECT;
+            // r = CFRP_DISCONNECT;
             // 获取丢失的包
             break;
         }
