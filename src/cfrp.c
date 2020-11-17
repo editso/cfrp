@@ -12,6 +12,7 @@
 
 #include "cfrp.h"
 #include "logger.h"
+#include "cbuff.h"
 
 static const char __BASE_LATTER__[] = {
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
@@ -77,6 +78,7 @@ extern char* cfrp_unregister(cfrp* frp, c_sock* sock);
 extern char* cfrp_clear_mappers(cfrp* frp);
 
 
+
 #define CFRP_ERR -1
 #define CFER_SUCC 1
 
@@ -99,6 +101,19 @@ typedef struct{
     int sfd;
     void *ptr;
 }cfrp_epoll_data;
+
+
+typedef struct{
+    char* code; // code
+    cbuff buff; // 缓存
+    int lost; // 丢包长度
+    int size; // 总长度
+}mem_data;
+
+
+extern mem_data* make_memdata(char* data, char* code, int size, int lost);
+
+extern int recycle_memdata(mem_data* data);
 
 
 #define CFRP_EPOLL_EVENT EPOLLET|EPOLLIN
@@ -205,12 +220,15 @@ extern cfrp* mmake_cfrp(){
     cfrp* frp = (cfrp*)malloc(sizeof(cfrp));
     bzero(frp, sizeof(cfrp));
     map_init(&frp->mappers, 20);
+    bzero(&frp->mem, sizeof(cqueue));
+    frp->mem.capacity = 5;
     return frp;
 }
 
+
 extern int make_epoll(){
     int efd = epoll_create(EPOLL_SIZE);
-    if(efd < 0)return CFRP_ERR;
+    if(efd < 0) return CFRP_ERR;
     return efd;
 }
 
@@ -345,6 +363,7 @@ extern int run_server(cfrp* frp){
     }
 }
 
+
 /**
  * 启动客户端
 */
@@ -365,9 +384,12 @@ extern int run_client(cfrp* frp){
                 */
                 s = cfrp_recv_forward(frp) != CFER_SUCC ? CFRP_STOP : CFER_SUCC;
             }else{
+                /**
+                 * 映射端传来了数据, 打包发送给服务端
+                */
                 s = cfrp_send_forward(frp, data->ptr);
             }
-            if( s == CFRP_STOP){
+            if( s == CFRP_STOP ){
                 cfrp_stop(frp);
             }else if(s == CFRP_DISCONNECT){
                 cfrp_close(frp, cfd);
@@ -378,7 +400,6 @@ extern int run_client(cfrp* frp){
         }
     }
 }
-
 
 /**
  * 启动服务
@@ -505,6 +526,7 @@ extern int cfrp_recv_forward(cfrp* frp){
     offset = 0;
     LOOP{
         bzero(buff, CFRP_BUFF_SIZE);
+        // 由于
         l = recv(sfd, buff + offset, cs, 0);
         LOG_DEBUG("recv size: expected: %d, current: %d, p: %d", cs, l, st);
         if(l == -1 && errno == EAGAIN){
@@ -518,9 +540,10 @@ extern int cfrp_recv_forward(cfrp* frp){
             // r = CFRP_DISCONNECT;
             // 网络原因
             LOG_INFO("lost packet: %d", cs - l);
-            // break;
-            offset += l;
-            cs = cs - l;
+            if(st == 2){
+                mem_data* data = make_memdata(buff, code, cs, cs - l);
+                queue_push(&frp->mem, data);
+            }
             break;
         }
         if(st == 0){
@@ -530,7 +553,7 @@ extern int cfrp_recv_forward(cfrp* frp){
                 LOG_DEBUG("head err");
                 r = CFRP_DISCONNECT;
                 break;
-            }
+           }
             cs = GMASK2(head.mask);
             if(cs == 0) {
                 cs = GMASK3(head.mask);
@@ -638,13 +661,13 @@ extern char* cfrp_order(unsigned int max){
 }
 
 extern char* cfrp_register(cfrp* frp, c_sock* sock){
-    char* uuid = cfrp_order(18);
-    while (map_get(&frp->mappers, uuid))
-        uuid = cfrp_order(18);
+    char* order = cfrp_order(18);
+    while (map_get(&frp->mappers, order))
+        order = cfrp_order(18);
     c_sock* msock = malloc(sizeof(c_sock));
     memcpy(msock, sock, sizeof(c_sock));
-    map_put(&frp->mappers, uuid, msock);
-    return uuid;
+    map_put(&frp->mappers, order, msock);
+    return order;
 }
 
 extern char* cfrp_clear_mappers(cfrp* frp){
@@ -658,4 +681,23 @@ extern char* cfrp_clear_mappers(cfrp* frp){
         cfrp_close(frp, sock->sfd);
         free(sock);
     }
+}
+
+extern mem_data* make_memdata(char* mdata, char* code, int size, int lost){
+    mem_data* data = calloc(1, sizeof(mem_data));
+    data->code = calloc(1, strlen(code) * sizeof(char));
+    data->lost = lost;
+    data->size = size;
+    init_buff(&data->buff, 10);
+    buff_appends(&data->buff, mdata, size - lost);
+    strcpy(data->code, code);
+    return data;
+} 
+
+extern int recycle_memdata(mem_data* data){
+    if(! data)return -1;
+    buff_recycle(&data->buff);
+    free(data->code);
+    free(data);
+    return 1;
 }

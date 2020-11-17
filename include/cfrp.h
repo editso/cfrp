@@ -115,6 +115,10 @@ typedef struct{
     */
     cmap mappers;
     /**
+     * 由于网络原因,可能接收到的数据会出现不完整
+    */
+    cqueue mem;
+    /**
      * epoll
      * */ 
     int efd;
