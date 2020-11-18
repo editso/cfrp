@@ -590,13 +590,10 @@ extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size){
 extern int cfrp_recv_forward(cfrp* frp){   
     cfrp_state* state = &frp->state;
     cfrp_head *head = &frp->state.head; 
-    
-    int sfd, tfd, l, hl, cl, *st, r, sl, m;
+    int sfd, l, hl, cl, *st, r, sl;
     sfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     char buff[CFRP_BUFF_SIZE];
-    hl = sizeof(cfrp_head); 
-    cl = hl; 
-    st = &frp->state.op;
+    hl = sizeof(cfrp_head), cl = hl, st = &frp->state.op;
     LOOP{
         r = CFRP_SUCC;
         bzero(buff, CFRP_BUFF_SIZE);
@@ -621,14 +618,14 @@ extern int cfrp_recv_forward(cfrp* frp){
            }
            (*st)++;  
         }else if(*st == 1){
-            state->order = malloc(cl);
+            state->order = calloc(1, cl);
             memcpy(state->order, buff, cl);
             LOG_DEBUG("order: %s", state->order);
             (*st)++;
         }else{
             c_sock* sock = map_get(&frp->mappers, state->order);
             if(frp->type == CLIENT && !sock){
-                sock = malloc(sizeof(c_sock));
+                sock = calloc(1, sizeof(c_sock));
                 if( make_connect(frp->peers + 1, sock) != CFRP_ERR &&
                     setnoblocking(sock->sfd) != CFRP_ERR){
                     EPOLL_ADD(frp, sock->sfd, state->order);
