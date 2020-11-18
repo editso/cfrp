@@ -26,7 +26,7 @@
 
 #define MAPPER_SIZE 10
 
-#define CFRP_WAIT 1;
+#define CFRP_WAIT 1
 
 #define CFRP_DISCONNECT 2
 
@@ -92,6 +92,27 @@ typedef struct
     c_peer peer;
 } c_sock;
 
+
+
+/**
+ * 接收状态
+*/
+typedef struct{
+    int op; 
+    /**
+     * 0
+    */
+    cfrp_head head;
+    /**
+     * 1
+    */
+    char* order;
+    /**
+     * 2
+    */
+    char* data;
+}cfrp_state;
+
 /**
  * 映射信息
 */
@@ -117,7 +138,11 @@ typedef struct{
     /**
      * 由于网络原因,可能接收到的数据会出现不完整
     */
-    cqueue mem;
+    cqueue cache;
+    /**
+     * 当前所在状态
+    */
+    cfrp_state state;
     /**
      * epoll
      * */ 

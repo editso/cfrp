@@ -25,7 +25,7 @@ extern int buff_appends(cbuff* buff, void* ptr, unsigned int size);
 
 extern char buff_get(cbuff* buff, int index);
 
-extern char* buff_str(cbuff* buff);
+extern char* buff_cpy(cbuff* buff);
 
 extern void* buff_sub(cbuff* buff, void* dest, int begin, int end);
 

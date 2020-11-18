@@ -45,18 +45,19 @@ extern char buff_get(cbuff* buff, int index){
 }
 
 extern void* buff_sub(cbuff* buff, void* dest, int begin, int end){
-    if( ! buff  || ! dest || buff->length <= end || end < begin) 
+    if( ! buff  || ! dest || buff->length < end || end < begin) 
         return dest;
     memcpy(dest, buff->_buf + begin, end);
     return dest;
 }
 
-extern char* buff_str(cbuff* buff){
+extern char* buff_cpy(cbuff* buff){
     if(! buff || buff->length <= 0) return (void *)0;
     char* tmp = calloc(1, sizeof(char) * buff->length);
     memcpy(tmp, buff->_buf, sizeof(char) *  buff->length);
     return tmp;
 }
+
 
 extern int buff_recycle(cbuff* buff){
     free(buff->_buf);

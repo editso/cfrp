@@ -1,10 +1,10 @@
 #include <sys/socket.h>
+#include <sys/epoll.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/epoll.h>
 #include <unistd.h>
 #include <error.h>
 #include <errno.h>
@@ -57,6 +57,15 @@ extern int cfrp_accept(int fd, c_sock* sock);
  * 关闭
 */
 extern int cfrp_close(cfrp* frp, int fd);
+
+
+/**
+ * 由于网络原因客户端发送来过的数据可能是分段的
+ * 使用该方法,会一直等待满足大小时才会返回数据
+*/
+extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size);
+
+
 /**
  * 转发接收到的信息
 */
@@ -75,14 +84,25 @@ extern char* cfrp_register(cfrp* frp, c_sock* sock);
  * 取消注册
 */
 extern char* cfrp_unregister(cfrp* frp, c_sock* sock);
+
 extern char* cfrp_clear_mappers(cfrp* frp);
 
 
 
+
+/**
+ * 错误
+*/
 #define CFRP_ERR -1
-#define CFER_SUCC 1
+/**
+ * 成功
+*/
+#define CFRP_SUCC 1
 
 
+/**
+ * 主机地址转换为网络地址
+*/
 #define SOCK_ADDR_IN(peer) \
 {\
         .sin_family = AF_INET,\
@@ -90,32 +110,37 @@ extern char* cfrp_clear_mappers(cfrp* frp);
         .sin_addr = {.s_addr = inet_addr(peer->addr)}\
 }
 
+
+/**
+ * 主机地址信息
+*/
 #define SOCK_PEER(__addr, peer)\
     peer.port = ntohs((__addr)->sin_port);\
     peer.addr = inet_ntoa((__addr)->sin_addr);\
 
+
+/**
+ * sockaddr_in to sockaddr
+ * 
+*/
 #define SOCKADDR(addr) (struct sockaddr*)addr
 
-
+/**
+ * epoll_event data
+*/
 typedef struct{
     int sfd;
     void *ptr;
 }cfrp_epoll_data;
 
 
-typedef struct{
-    char* code; // code
-    cbuff buff; // 缓存
-    int lost; // 丢包长度
-    int size; // 总长度
-}mem_data;
 
 
-extern mem_data* make_memdata(char* data, char* code, int size, int lost);
-
-extern int recycle_memdata(mem_data* data);
 
 
+/**
+ * epoll 水平触发可读事件
+*/
 #define CFRP_EPOLL_EVENT EPOLLET|EPOLLIN
 
 #define __DEF_EPOLL_EVENT__(__vname, __events, __data) \
@@ -126,19 +151,35 @@ extern int recycle_memdata(mem_data* data);
 #define __DEF_EPOLL_WAIT__(__vname, efd, __events,__max, __timeout) \
     if(efd == -1) break;\
     int __vname = epoll_wait(efd, __events,  __max, __timeout);
-    
+
+/**
+ * 向epoll中注册一个事件
+*/
 #define EPOLL_ADD(__frp, __sfd, __data) cfrp_listen(__frp, __sfd, EPOLL_CTL_ADD, CFRP_EPOLL_EVENT, __data)
-
+/**
+ * 重新注册
+*/
 #define EPOLL_MOD(__frp, __sfd, __ev) epoll_ctl(__frp->efd, EPOLL_CTL_MOD, __sfd, __ev)
-
+/**
+ * 删除事件
+*/
 #define EPOLL_DEL(__frp, __sfd, __ev) epoll_ctl(__frp->efd, EPOLL_CTL_DEL, __sfd, __ev)
 
+/**
+ * 监听
+*/
 #define LISTEN\
     for(;;)
 
+/**
+ * 循环
+*/
 #define LOOP\
     for(;;)
 
+/**
+ * 处理epoll 事件
+*/
 #define HANDLER_EPOLL_EVENT(count, ev, data, __events) \
     ev = __events[0];\
     data = ev.data.ptr;\
@@ -156,7 +197,9 @@ extern int recycle_memdata(mem_data* data);
 */
 #define CFRP_LFD(frp) frp->sock->sfd
 
-
+/**
+ * 设置cfrp转发头mask
+*/
 #define HEAD_MASK(__head, v, p) (__head)->mask = cfrp_mask((__head)->mask, v, p) 
 
 
@@ -170,7 +213,7 @@ extern int setnoblocking(int fd){
     }else if(fcntl(fd, F_SETFL, flag | O_NONBLOCK) < 0){
         return CFRP_ERR;
     }
-    return CFER_SUCC;
+    return CFRP_SUCC;
 }
 
 
@@ -220,8 +263,9 @@ extern cfrp* mmake_cfrp(){
     cfrp* frp = (cfrp*)malloc(sizeof(cfrp));
     bzero(frp, sizeof(cfrp));
     map_init(&frp->mappers, 20);
-    bzero(&frp->mem, sizeof(cqueue));
-    frp->mem.capacity = 5;
+    bzero(&frp->cache, sizeof(cqueue));
+    frp->cache.capacity = 5;
+    frp->state.op = 0;
     return frp;
 }
 
@@ -382,7 +426,7 @@ extern int run_client(cfrp* frp){
                 /**
                  * 服务端传来了数据需要将数据解析然后转发的目标地址
                 */
-                s = cfrp_recv_forward(frp) != CFER_SUCC ? CFRP_STOP : CFER_SUCC;
+                s = cfrp_recv_forward(frp) != CFRP_SUCC ? CFRP_STOP : CFRP_SUCC;
             }else{
                 /**
                  * 映射端传来了数据, 打包发送给服务端
@@ -450,7 +494,7 @@ extern int make_tcp(c_peer *peer, c_sock *sock){
     sock->sfd = fd;
     sock->peer.addr = peer->addr;
     sock->peer.port = peer->port;
-    return CFER_SUCC;
+    return CFRP_SUCC;
 }
 
 /**
@@ -471,6 +515,7 @@ extern int make_connect(c_peer* peer, c_sock *sock){
     return fd;
 }
 
+
 extern cfrp_head* make_head(){
     cfrp_head* head  = (cfrp_head*)malloc(sizeof(cfrp_head));
     bzero(head, sizeof(cfrp_head));
@@ -484,7 +529,7 @@ extern int cfrp_listen(cfrp* frp, int sfd, int op, int events, void* __data){
     __DEF_EPOLL_EVENT__(ev, events, data);
     if(epoll_ctl(frp->efd, op, sfd, &ev) < 0 )
         return CFRP_ERR;
-    return CFER_SUCC;
+    return CFRP_SUCC;
 }
 
 extern int cfrp_accept(int fd, c_sock* sock){
@@ -496,7 +541,7 @@ extern int cfrp_accept(int fd, c_sock* sock){
         return CFRP_ERR;
     SOCK_PEER(&addr, sock->peer); 
     sock->sfd = afd;
-    return  CFER_SUCC;
+    return  CFRP_SUCC;
 }
 
 extern int cfrp_close(cfrp* frp, int fd){
@@ -511,69 +556,84 @@ extern int cfrp_close(cfrp* frp, int fd){
     EPOLL_DEL(frp, fd, NULL);
     if(shutdown(fd, SHUT_RDWR) < 0 || close(fd))
         return CFRP_ERR;
-    return CFER_SUCC;
+    return CFRP_SUCC;
+}
+
+
+extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size){
+    if(size <= 0)
+        return CFRP_ERR;   
+    char mbuff[size];
+    cbuff* mcache = queue_pop(&frp->cache);
+    if(! mcache)
+        mcache = make_buff(size);
+    size = size - mcache->length;
+    int l = recv(fd, mbuff, size, 0);
+    if(l == -1 && errno == EAGAIN){
+        return CFRP_WAIT;
+    }else if(l == 0 && errno == EAGAIN){
+        return CFRP_ERR;
+    }
+    buff_appends(mcache, mbuff, l);
+    if(l != size){
+        queue_push(&frp->cache, mcache);
+        return CFRP_WAIT;                    
+    }    
+    buff_sub(mcache, buff, 0, size);
+    LOG_INFO("length: %d", l);
+    return size;
 }
 
 /**
  * 转发接收到的信息
 */
 extern int cfrp_recv_forward(cfrp* frp){   
-    cfrp_head head; 
-    char buff[CFRP_BUFF_SIZE], *code;
-    int sfd, tfd, l, hs, cs, st, r, sl, m, offset;
+    cfrp_state* state = &frp->state;
+    cfrp_head *head = &frp->state.head; 
+    
+    int sfd, tfd, l, hl, cl, *st, r, sl, m;
     sfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
-    hs = sizeof(cfrp_head); cs = hs, st = 0;
-    offset = 0;
+    char buff[CFRP_BUFF_SIZE];
+    hl = sizeof(cfrp_head); 
+    cl = hl; 
+    st = &frp->state.op;
     LOOP{
+        r = CFRP_SUCC;
         bzero(buff, CFRP_BUFF_SIZE);
-        // 由于
-        l = recv(sfd, buff + offset, cs, 0);
-        LOG_DEBUG("recv size: expected: %d, current: %d, p: %d", cs, l, st);
-        if(l == -1 && errno == EAGAIN){
-            r = CFRP_WAIT;
-            break;
-        }else if(l == 0 && errno == EAGAIN){
+        if(*st == 1){
+            cl = GMASK2(head->mask);
+        }else if(*st == 2){
+            cl = GMASK3(head->mask);
+        }
+        if((l = cfrp_recv(frp, sfd, buff, cl)) == CFRP_ERR){
             r = CFRP_DISCONNECT;
             break;
-        }
-        if(l != cs){
-            // r = CFRP_DISCONNECT;
-            // 网络原因
-            LOG_INFO("lost packet: %d", cs - l);
-            if(st == 2){
-                mem_data* data = make_memdata(buff, code, cs, cs - l);
-                queue_push(&frp->mem, data);
-            }
+        }else if (l == CFRP_WAIT){
             break;
         }
-        if(st == 0){
-            memcpy(&head, buff, cs);
-            m = GMASK1(head.mask);
-            if(m == 0x00){
-                LOG_DEBUG("head err");
+        LOG_DEBUG("recv size: expected: %d, current: %d, p: %d", cl, l, *st);
+        if(*st == 0){
+            memcpy(head, buff, cl);
+            LOG_INFO("recv: %d", head->mask);
+            if(GMASK1(head->mask) == 0x00){
+                LOG_DEBUG("header error");
                 r = CFRP_DISCONNECT;
                 break;
            }
-            cs = GMASK2(head.mask);
-            if(cs == 0) {
-                cs = GMASK3(head.mask);
-                st++;
-            }
-            st++;
-        }else if(st == 1){
-            LOG_DEBUG("code: %s", buff);
-            code = malloc(sizeof(char) * l);
-            memcpy(code, buff, l);
-            cs = GMASK3(head.mask);
-            st++;
+           (*st)++;  
+        }else if(*st == 1){
+            state->order = malloc(cl);
+            memcpy(state->order, buff, cl);
+            LOG_DEBUG("order: %s", state->order);
+            (*st)++;
         }else{
-            c_sock* sock = map_get(&frp->mappers, code);
+            c_sock* sock = map_get(&frp->mappers, state->order);
             if(frp->type == CLIENT && !sock){
                 sock = malloc(sizeof(c_sock));
                 if( make_connect(frp->peers + 1, sock) != CFRP_ERR &&
                     setnoblocking(sock->sfd) != CFRP_ERR){
-                    EPOLL_ADD(frp, sock->sfd, code);
-                    map_put(&frp->mappers, code, sock);
+                    EPOLL_ADD(frp, sock->sfd, state->order);
+                    map_put(&frp->mappers, state->order, sock);
                 }else{
                     free(sock);
                     sock = (void*)0;
@@ -585,14 +645,15 @@ extern int cfrp_recv_forward(cfrp* frp){
                 break;
             }
             LOG_DEBUG("send: total: %d, current: %d", l, sl);
-            st = 0;
-            cs = hs;
-            r = CFRP_CONN;
-            bzero(&head, hs);
+            (*st) = 0;
+            cl = hl;
+            bzero(head, hl);
+            free(state->order);
         }
     }
     return r;
 }
+
 
 extern int cfrp_send_forward(cfrp* frp, char* code){
     cfrp_head head;
@@ -602,7 +663,7 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
     hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); cl = strlen(code); 
     tfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     LOOP{
-        r = CFER_SUCC;
+        r = CFRP_SUCC;
         bzero(&head, hs);
         bzero(buff, bs);
         l = recv(sfd, buff, bs, 0);
@@ -613,10 +674,6 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
             r = CFRP_DISCONNECT;
             break;
         }
-
-        // head.mask = cfrp_mask(head.mask, 0x01, MASK_1);
-        // head.mask = cfrp_mask(head.mask, ul, MASK_2);
-        // head.mask = cfrp_mask(head.mask, l, MASK_3);
         HEAD_MASK(&head, 0x01, MASK_1);
         HEAD_MASK(&head, cl, MASK_2);
         HEAD_MASK(&head, l, MASK_3);
@@ -632,13 +689,12 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
         }
         LOG_DEBUG("send: total: %d, current: %d", total, sl);
     }
-    if(r == CFER_SUCC)
+    if(r == CFRP_SUCC)
         LOG_INFO("forward success");
     else
         LOG_ERROR("forward error, code: %d, message: %s", errno, strerror(errno));
     return r;
 }
-
 
 extern char* cfrp_order(unsigned int max){
     max = max < 10 ? 10: max;
@@ -683,21 +739,3 @@ extern char* cfrp_clear_mappers(cfrp* frp){
     }
 }
 
-extern mem_data* make_memdata(char* mdata, char* code, int size, int lost){
-    mem_data* data = calloc(1, sizeof(mem_data));
-    data->code = calloc(1, strlen(code) * sizeof(char));
-    data->lost = lost;
-    data->size = size;
-    init_buff(&data->buff, 10);
-    buff_appends(&data->buff, mdata, size - lost);
-    strcpy(data->code, code);
-    return data;
-} 
-
-extern int recycle_memdata(mem_data* data){
-    if(! data)return -1;
-    buff_recycle(&data->buff);
-    free(data->code);
-    free(data);
-    return 1;
-}
