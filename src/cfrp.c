@@ -614,7 +614,6 @@ extern int cfrp_recv_forward(cfrp* frp){
         LOG_DEBUG("recv size: expected: %d, current: %d, p: %d", cl, l, *st);
         if(*st == 0){
             memcpy(head, buff, cl);
-            LOG_INFO("recv: %d", head->mask);
             if(GMASK1(head->mask) == 0x00){
                 LOG_DEBUG("header error");
                 r = CFRP_DISCONNECT;
@@ -648,7 +647,9 @@ extern int cfrp_recv_forward(cfrp* frp){
             (*st) = 0;
             cl = hl;
             bzero(head, hl);
-            free(state->order);
+            if(state->order){
+                free(state->order);
+            }
         }
     }
     return r;
