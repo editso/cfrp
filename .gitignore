@@ -6,4 +6,4 @@ cmake-build-debug
 config.h
 test.c
 **/*.bak
-
+build
