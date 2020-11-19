@@ -1,13 +1,15 @@
+#include <stdlib.h>
+#include <string.h>
+
 #include "cqueue.h"
-#include "stdlib.h"
-#include "string.h"
+#include "clib.h"
 
 /**
  * 创建一个固定容量的 queue
 */
 cqueue* make_queue(int size, int (*recycle)(void* el)){
     cqueue* queue = malloc(sizeof(cqueue));
-    bzero(queue, sizeof(cqueue));
+    cbzero(queue, sizeof(cqueue));
     queue->capacity = size;
     queue->_elems = malloc(sizeof(void *) * size);
     queue->_recycle = recycle;

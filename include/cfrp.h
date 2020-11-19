@@ -13,9 +13,9 @@
 /**
  * get mask
 */
-#define GMASK1(m) m >> 30
-#define GMASK2(m) m << 2 >> 26
-#define GMASK3(m) m & ~(~0 << 24)
+#define GMASK1(m) m >> 30u
+#define GMASK2(m) m << 2u >> 26u
+#define GMASK3(m) m & ~(~0u << 24u)
 
 #define EPOLL_SIZE 10
 

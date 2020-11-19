@@ -1,8 +1,12 @@
+#include <string.h>
+#include <stdlib.h>
+
 #include "cbuff.h"
-#include "string.h"
-#include "stdlib.h"
+#include "clib.h"
 
-
+/**
+ * 扩张容量
+*/
 extern int buff_increase(cbuff* buff, int size);
 
 
@@ -21,7 +25,7 @@ extern cbuff* make_buff(unsigned int capatity){
 
 extern cbuff* init_buff(cbuff* buff, int capatity){
     if(! buff) return buff;
-    bzero(buff, sizeof(cbuff));
+    cbzero(buff, sizeof(cbuff));
     buff->_capatity = capatity <= 0 ? 1 : capatity;
     buff->_buf = calloc(1, sizeof(char) * buff->_capatity);
 }

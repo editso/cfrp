@@ -2,9 +2,11 @@
 #include <string.h>
 
 #include "clist.h"
+#include "clib.h"
 
 
 extern cnode* make_node(void* el);
+
 extern cnode* get_node(clist* list, int index);
 
 extern cnode* get_node(clist* list, int index){
@@ -18,14 +20,14 @@ extern cnode* get_node(clist* list, int index){
 
 extern cnode* make_node(void* el){
     cnode* node = malloc(sizeof(cnode));
-    bzero(node,  sizeof(cnode));
+    cbzero(node,  sizeof(cnode));
     node->el = el;
     return node;
 }
 
 extern clist* make_list(){
     clist* list = malloc(sizeof(clist));
-    bzero(list, sizeof(list));
+    cbzero(list, sizeof(clist));
     return list;
 }
 

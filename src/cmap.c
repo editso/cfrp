@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #include "cmap.h"
-
+#include "clib.h"
 
 
 extern int get_max_prime(int num);
@@ -51,11 +51,11 @@ extern cmap* make_map(int capacity){
 
 extern int map_init(cmap* map, int capacity){
     if(! map)return -1;
-    bzero(map, sizeof(cmap));
+    cbzero(map, sizeof(cmap));
     map->capacity = capacity;
     map->_elems = malloc( sizeof(clist) * capacity);
     map->_prime = get_max_prime(capacity);
-    bzero(map->_elems, sizeof(sizeof(clist) * capacity));
+    cbzero(map->_elems, sizeof(sizeof(clist) * capacity));
 }
 
 /**

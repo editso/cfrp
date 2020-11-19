@@ -13,6 +13,7 @@
 #include "cfrp.h"
 #include "logger.h"
 #include "cbuff.h"
+#include "clib.h"
 
 static const char __BASE_LATTER__[] = {
     'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j',
@@ -85,9 +86,7 @@ extern char* cfrp_register(cfrp* frp, c_sock* sock);
 */
 extern char* cfrp_unregister(cfrp* frp, c_sock* sock);
 
-extern char* cfrp_clear_mappers(cfrp* frp);
-
-
+extern void cfrp_clear_mappers(cfrp* frp);
 
 
 /**
@@ -132,10 +131,6 @@ typedef struct{
     int sfd;
     void *ptr;
 }cfrp_epoll_data;
-
-
-
-
 
 
 /**
@@ -207,10 +202,11 @@ typedef struct{
  * 设置非阻塞IO
 */
 extern int setnoblocking(int fd){
-    int flag = -1;
+    int flag;
     if((flag = fcntl(fd, F_GETFL, 0)) < 0){
         return CFRP_ERR;
-    }else if(fcntl(fd, F_SETFL, flag | O_NONBLOCK) < 0){
+    }
+    if(fcntl(fd, F_SETFL, flag | O_NONBLOCK) < 0){
         return CFRP_ERR;
     }
     return CFRP_SUCC;
@@ -224,7 +220,7 @@ extern int setnoblocking(int fd){
 extern char* cfrp_pack(cfrp_head *head){
     int size = sizeof(cfrp_head);
     char* _pack = (char *)malloc(sizeof(char) * size);
-    bzero(_pack, sizeof(char) * size);
+    cbzero(_pack, sizeof(char) * size);
     memcpy(_pack, head, size);
     return _pack;
 }
@@ -236,7 +232,7 @@ extern char* cfrp_pack(cfrp_head *head){
 extern cfrp_head* cfrp_unpack(char* data){
     int size = sizeof(cfrp_head);
     cfrp_head* _pack = (cfrp_head *)malloc(size);
-    bzero(_pack, size);
+    cbzero(_pack, size);
     memcpy(_pack, data, sizeof(char) * size);
     return _pack;
 }
@@ -261,9 +257,9 @@ unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b){
 
 extern cfrp* mmake_cfrp(){
     cfrp* frp = (cfrp*)malloc(sizeof(cfrp));
-    bzero(frp, sizeof(cfrp));
+    cbzero(frp, sizeof(cfrp));
     map_init(&frp->mappers, 20);
-    bzero(&frp->cache, sizeof(cqueue));
+    cbzero(&frp->cache, sizeof(cqueue));
     frp->cache.capacity = 5;
     frp->state.op = 0;
     return frp;
@@ -358,7 +354,7 @@ extern int run_server(cfrp* frp){
     LISTEN{
         __DEF_EPOLL_WAIT__(c, frp->efd, events, 5, -1);
         mfd = frp->sock[2].sfd;
-        bzero(&sock, sizeof(c_sock));
+        cbzero(&sock, sizeof(c_sock));
         HANDLER_EPOLL_EVENT(c, ev, data, events){
             cfd  = data->sfd;
             if(cfd == rfd || cfd == lfd){
@@ -405,6 +401,7 @@ extern int run_server(cfrp* frp){
             EPOLL_MOD(frp, cfd, &ev);
         }
     }
+    return 1;
 }
 
 
@@ -443,6 +440,7 @@ extern int run_client(cfrp* frp){
             }
         }
     }
+    return 1;
 }
 
 /**
@@ -469,12 +467,13 @@ extern int  cfrp_run(cfrp* frp){
  * 停止服务
 */
 extern int  cfrp_stop(cfrp* frp){
-    if(frp->type = CLIENT){
+    if(frp->type == CLIENT){
         if(frp->sock)
             cfrp_close(frp, frp->sock->sfd);
     }
     frp->efd = -1;
     LOG_INFO("cfrp stop, code: %d, message: %s", errno, strerror(errno));
+    return 1;
 }
 
 /**
@@ -518,14 +517,14 @@ extern int make_connect(c_peer* peer, c_sock *sock){
 
 extern cfrp_head* make_head(){
     cfrp_head* head  = (cfrp_head*)malloc(sizeof(cfrp_head));
-    bzero(head, sizeof(cfrp_head));
+    cbzero(head, sizeof(cfrp_head));
     return head;
 }
 
-extern int cfrp_listen(cfrp* frp, int sfd, int op, int events, void* __data){
+extern int cfrp_listen(cfrp* frp, int sfd, int op, int events, void* _data){
     cfrp_epoll_data *data  = malloc(sizeof(cfrp_epoll_data));
     data->sfd = sfd;
-    data->ptr = __data;
+    data->ptr = _data;
     __DEF_EPOLL_EVENT__(ev, events, data);
     if(epoll_ctl(frp->efd, op, sfd, &ev) < 0 )
         return CFRP_ERR;
@@ -533,7 +532,7 @@ extern int cfrp_listen(cfrp* frp, int sfd, int op, int events, void* __data){
 }
 
 extern int cfrp_accept(int fd, c_sock* sock){
-    bzero(sock,  sizeof(c_sock));
+    cbzero(sock,  sizeof(c_sock));
     int afd = -1;
     struct sockaddr_in addr;
     socklen_t len = sizeof(struct sockaddr_in);
@@ -549,9 +548,9 @@ extern int cfrp_close(cfrp* frp, int fd){
     if(frp->sock[2].sfd == fd || frp->sock->sfd == fd){
         cfrp_clear_mappers(frp);
         if(frp->type == SERVER)
-            bzero(frp->sock + 2, sizeof(c_sock));
+            cbzero(frp->sock + 2, sizeof(c_sock));
         else if (frp->type == CLIENT)
-            bzero(frp->sock, sizeof(c_sock));
+            cbzero(frp->sock, sizeof(c_sock));
     }
     EPOLL_DEL(frp, fd, NULL);
     if(shutdown(fd, SHUT_RDWR) < 0 || close(fd))
@@ -596,7 +595,7 @@ extern int cfrp_recv_forward(cfrp* frp){
     hl = sizeof(cfrp_head), cl = hl, st = &frp->state.op;
     LOOP{
         r = CFRP_SUCC;
-        bzero(buff, CFRP_BUFF_SIZE);
+        cbzero(buff, CFRP_BUFF_SIZE);
         if(*st == 1){
             cl = GMASK2(head->mask);
         }else if(*st == 2){
@@ -643,7 +642,7 @@ extern int cfrp_recv_forward(cfrp* frp){
             LOG_DEBUG("send: total: %d, current: %d", l, sl);
             (*st) = 0;
             cl = hl;
-            bzero(head, hl);
+            cbzero(head, hl);
             if(state->order){
                 free(state->order);
             }
@@ -662,8 +661,8 @@ extern int cfrp_send_forward(cfrp* frp, char* code){
     tfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     LOOP{
         r = CFRP_SUCC;
-        bzero(&head, hs);
-        bzero(buff, bs);
+        cbzero(&head, hs);
+        cbzero(buff, bs);
         l = recv(sfd, buff, bs, 0);
         if( l == -1 && errno == EAGAIN){
             r = CFRP_WAIT;
@@ -724,9 +723,9 @@ extern char* cfrp_register(cfrp* frp, c_sock* sock){
     return order;
 }
 
-extern char* cfrp_clear_mappers(cfrp* frp){
+extern void cfrp_clear_mappers(cfrp* frp){
     clist list;
-    bzero(&list, sizeof(clist));
+    cbzero(&list, sizeof(clist));
     map_keys(&frp->mappers, &list);
     c_sock *sock;
     for(int i = 0; i < list.size; i++){
