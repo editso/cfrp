@@ -54,17 +54,11 @@ extern int cfrp_listen(cfrp* frp, int sfd, int op, int events, void* data);
  * 允许一个连接
 */
 extern int cfrp_accept(int fd, c_sock* sock);
+
 /**
  * 关闭
 */
 extern int cfrp_close(cfrp* frp, int fd);
-
-
-/**
- * 由于网络原因客户端发送来过的数据可能是分段的
- * 使用该方法,会一直等待满足大小时才会返回数据
-*/
-extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size);
 
 
 /**
@@ -89,14 +83,6 @@ extern char* cfrp_unregister(cfrp* frp, c_sock* sock);
 extern void cfrp_clear_mappers(cfrp* frp);
 
 
-/**
- * 错误
-*/
-#define CFRP_ERR -1
-/**
- * 成功
-*/
-#define CFRP_SUCC 1
 
 
 /**
@@ -582,11 +568,13 @@ extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size){
     buff_appends(mcache, mbuff, l);
     LOG_INFO("total: %d, current: %d, sub: %d", size, l, size - mcache->length);
     if(mcache->length != size){
-        LOG_INFO("queue push");
         queue_push(&frp->cache, mcache);
         return CFRP_WAIT;
     }
     buff_sub(mcache, buff, 0, size);
+    // 回收内存
+    buff_recycle(mcache);
+    free(mcache);
     return size;
 }
 
@@ -636,9 +624,9 @@ extern int cfrp_recv_forward(cfrp* frp){
                 sock = calloc(1, sizeof(c_sock));
                 if( make_connect(frp->peers + 1, sock) != CFRP_ERR &&
                     setnoblocking(sock->sfd) != CFRP_ERR){
-                    cfrp_token* sdesc = make_cfrp_token(tok->len, tok->token);
-                    EPOLL_ADD(frp, sock->sfd, sdesc);
-                    map_put(&frp->mappers, sdesc->token, sock);
+                    cfrp_token* stok = make_cfrp_token(tok->len, tok->token);
+                    EPOLL_ADD(frp, sock->sfd, stok);
+                    map_put(&frp->mappers, stok->token, sock);
                 }else{
                     free(sock);
                     sock = (void*)0;
@@ -745,6 +733,7 @@ extern void cfrp_clear_mappers(cfrp* frp){
         free(sock);
     }
 }
+
 
 extern cfrp_token* make_cfrp_token(unsigned int len, char* token){
     cfrp_token* tok = calloc(1, sizeof(cfrp_token));

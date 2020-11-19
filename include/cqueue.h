@@ -1,12 +1,17 @@
 #ifndef __CQUEUE_H__
 #define __CQUEUE_H__
 
-
+/**
+ * 队列
+*/
 typedef struct{
     int size;
     int capacity;
     int _lp;
     int _cp;
+    /**
+     * 元素回收回调
+    */
     int (*_recycle)(void *elem);
     void** _elems;
 }cqueue;

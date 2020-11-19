@@ -10,12 +10,20 @@
 #define MASK_1 1
 #define MASK_2 2
 #define MASK_3 3
+
 /**
- * get mask
+ * state
 */
 #define GMASK1(m) m >> 30u
+/**
+ * token
+*/
 #define GMASK2(m) m << 2u >> 26u
+/**
+ * data length
+*/
 #define GMASK3(m) m & ~(~0u << 24u)
+
 
 #define EPOLL_SIZE 10
 
@@ -24,24 +32,43 @@
 */
 #define CFRP_BUFF_SIZE 1024 * 1024
 
+
+/**
+ * 错误
+*/
+#define CFRP_ERR -1
+/**
+ * 成功
+*/
+#define CFRP_SUCC 1
+
+/**
+ * 映射数量
+*/
 #define MAPPER_SIZE 10
 
+/**
+ * 等待
+*/
 #define CFRP_WAIT 1
 
+/**
+ * 断开
+*/
 #define CFRP_DISCONNECT 2
-
+/**
+ * 停止
+*/
 #define CFRP_STOP 3
-
+/**
+ * 连接
+*/
 #define CFRP_CONN 4
-
+/**
+ * 关闭映射
+*/
 #define CFRP_DISMAPPER 5
 
-
-enum{
-    CONNECT = 0x00, // 连接
-    DISCONNECT = 0x02, // 断开
-    EXCEPT = 0x03, // 异常
-};
 
 typedef enum{
     SERVER,
@@ -65,10 +92,6 @@ typedef struct{
      * 00000000 0000000 0000000 1111111
      */
     unsigned int mask;
-    /**
-     * 偏移
-    */
-    unsigned int offset;
 }cfrp_head;
 
 /**
@@ -110,25 +133,26 @@ typedef struct{
 }cfrp_token;
 
 /**
- * 接收状态
+ * 在传输过程中, 由于网络原因客户端发过来的数据不会一次性被接收全
+ * 该结构体就是为了保证网络原因然数据不会出现错误
+ * 与 cfrp_recv 配和
+ * 数据接收状态
 */
 typedef struct{
     /**
      * 操作数
+     * 1: 已经获得请求头
+     * 2: 已经获得请求token
     */
     int op; 
     /**
-     * 0
+     * 请求头信息
     */
     cfrp_head head;
     /**
-     * 1
+     * 请求附带的token信息
     */
     cfrp_token tok;
-    /**
-     * 2
-    */
-    char* data;
 }cfrp_state;
 
 
@@ -136,6 +160,10 @@ typedef struct{
  * 映射信息
 */
 typedef struct{
+    /**
+     * epoll
+     * */ 
+    int efd;
     /**
      * 主机信息
     */
@@ -162,11 +190,14 @@ typedef struct{
      * 当前所在状态
     */
     cfrp_state state;
-    /**
-     * epoll
-     * */ 
-    int efd;
 }cfrp;
+
+
+/**
+ * 由于网络原因客户端发送来过的数据可能是分段的
+ * 使用该方法,会一直等待满足大小时才会返回数据
+*/
+extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size);
 
 /**
  * 创建一个token

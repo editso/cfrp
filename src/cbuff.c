@@ -5,7 +5,7 @@
 #include "clib.h"
 
 /**
- * 扩张容量
+ * 扩大容量
 */
 extern int buff_increase(cbuff* buff, int size);
 
