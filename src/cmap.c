@@ -114,9 +114,10 @@ extern void *map_remove(cmap *map, void* key){
  * 获取
 */
 extern void *map_get(cmap *map, void* key){
+    if(! key) return (void*) 0;
     unsigned long hash = map_hash(map, key);
     clist *list = map->_elems[ map_hash_fun(map, key) ];
-    if( ! list) return (void *)0;
+    if( ! list) return (void *) 0;
     cmap_elem *el;
     for(cnode *node = list->head; node; node = node->next){
         el = node->el;

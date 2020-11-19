@@ -93,6 +93,13 @@ typedef struct
 } c_sock;
 
 
+/**
+ * cfrp连接信息
+*/
+typedef struct{
+    unsigned int len;
+    char *order;
+}cfrp_description;
 
 /**
  * 接收状态
@@ -106,12 +113,13 @@ typedef struct{
     /**
      * 1
     */
-    char* order;
+    cfrp_description desc;
     /**
      * 2
     */
     char* data;
 }cfrp_state;
+
 
 /**
  * 映射信息
@@ -149,6 +157,11 @@ typedef struct{
     int efd;
 }cfrp;
 
+
+
+
+
+extern cfrp_description* make_cfrp_description(unsigned int len, char* order);
 
 /**
  * 设置非阻塞IO
@@ -198,5 +211,5 @@ extern cfrp_head* make_head();
 
 extern unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b);
 
-extern char* cfrp_order(unsigned int max);
+extern int cfrp_order(char* dest, unsigned int max);
 #endif
