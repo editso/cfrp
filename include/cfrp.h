@@ -72,10 +72,16 @@ typedef struct{
 }cfrp_head;
 
 /**
- * 一个连接链接端信息
+ * 主机地址信息
 */
 typedef struct{
+    /**
+     * 端口号
+    */
     int port;
+    /**
+     * 地址
+    */
     char* addr;
 } c_peer;
 
@@ -85,26 +91,31 @@ typedef struct{
 typedef struct
 {   
     int sfd;
-    /**
-     * 在每次发送数据包时,发送的数据将被记住
-    */
-    cqueue mem;
     c_peer peer;
 } c_sock;
 
 
 /**
- * cfrp连接信息
+ * cfrp token
 */
 typedef struct{
+    /**
+     * 长度
+    */
     unsigned int len;
-    char *order;
-}cfrp_description;
+    /**
+     * token信息
+    */
+    char *token;
+}cfrp_token;
 
 /**
  * 接收状态
 */
 typedef struct{
+    /**
+     * 操作数
+    */
     int op; 
     /**
      * 0
@@ -113,7 +124,7 @@ typedef struct{
     /**
      * 1
     */
-    cfrp_description desc;
+    cfrp_token tok;
     /**
      * 2
     */
@@ -126,7 +137,7 @@ typedef struct{
 */
 typedef struct{
     /**
-     * 
+     * 主机信息
     */
     c_peer peers[2]; 
     /**
@@ -157,11 +168,10 @@ typedef struct{
     int efd;
 }cfrp;
 
-
-
-
-
-extern cfrp_description* make_cfrp_description(unsigned int len, char* order);
+/**
+ * 创建一个token
+*/
+extern cfrp_token* make_cfrp_token(unsigned int len, char* token);
 
 /**
  * 设置非阻塞IO
@@ -211,5 +221,8 @@ extern cfrp_head* make_head();
 
 extern unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b);
 
-extern int cfrp_order(char* dest, unsigned int max);
+/**
+ * 生成一个token
+*/
+extern int cfrp_gentok(char* dest, unsigned int len);
 #endif

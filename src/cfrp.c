@@ -75,12 +75,12 @@ extern int cfrp_recv_forward(cfrp* frp);
 /**
  * 转发发送的信息
 */
-extern int cfrp_send_forward(cfrp* frp, cfrp_description* desc);
+extern int cfrp_send_forward(cfrp* frp, cfrp_token* tok);
 
 /**
  * 注册监听
 */
-extern cfrp_description* cfrp_register(cfrp* frp, c_sock* sock);
+extern cfrp_token* cfrp_register(cfrp* frp, c_sock* sock);
 /**
  * 取消注册
 */
@@ -344,7 +344,7 @@ extern int run_server(cfrp* frp){
     struct epoll_event events[5], ev;
     cfrp_epoll_data* data;
     c_sock sock;
-    cfrp_description* desc;
+    cfrp_token* tok;
     LOG_INFO("server started !\nMapping: [%s:%d]:%d->[%s:%d]:%d", 
                 frp->sock[1].peer.addr,
                 frp->sock[1].peer.port,
@@ -381,10 +381,10 @@ extern int run_server(cfrp* frp){
                      * 注册监听并生产一个唯一标识
                     */
                     LOG_INFO("register mapping");
-                    desc = cfrp_register(frp, &sock);
+                    tok = cfrp_register(frp, &sock);
                 }
                 // 注册监听
-                EPOLL_ADD(frp, sock.sfd, desc);
+                EPOLL_ADD(frp, sock.sfd, tok);
             }else{
                 int s = CFRP_CONN;
                 if(mfd == cfd){
@@ -396,9 +396,9 @@ extern int run_server(cfrp* frp){
                 }
                 if(s == CFRP_DISCONNECT || s == CFRP_STOP){
                     cfrp_close(frp, cfd);
-                    desc = data->ptr;
-                    free(map_remove(&frp->mappers, desc->order));
-                    free(desc);
+                    tok = data->ptr;
+                    free(map_remove(&frp->mappers, tok->token));
+                    free(tok);
                     continue;
                 }
             }
@@ -415,7 +415,7 @@ extern int run_server(cfrp* frp){
 extern int run_client(cfrp* frp){
     struct epoll_event events[10], ev;
     cfrp_epoll_data *data;
-    cfrp_description* desc;
+    cfrp_token* tok;
     int cfd = -1, lfd = -1;
     LISTEN{
         __DEF_EPOLL_WAIT__(c, frp->efd, events, 5, -1);
@@ -439,9 +439,9 @@ extern int run_client(cfrp* frp){
                 cfrp_stop(frp);
             }else if(s == CFRP_DISCONNECT){
                 cfrp_close(frp, cfd);
-                desc = data->ptr;
-                free(map_remove(&frp->mappers, desc->order));
-                free(desc);
+                tok = data->ptr;
+                free(map_remove(&frp->mappers, tok->token));
+                free(tok);
             }else{
                 EPOLL_MOD(frp, cfd, &ev);
             }
@@ -596,7 +596,7 @@ extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size){
 extern int cfrp_recv_forward(cfrp* frp){   
     cfrp_state* state = &frp->state;
     cfrp_head *head = &frp->state.head; 
-    cfrp_description *desc = &state->desc;
+    cfrp_token *tok = &state->tok;
     int sfd, l, hl, cl, *st, r, sl;
     sfd = frp->type == SERVER ? frp->sock[2].sfd : frp->sock->sfd;
     char buff[CFRP_BUFF_SIZE];
@@ -613,7 +613,6 @@ extern int cfrp_recv_forward(cfrp* frp){
             r = CFRP_DISCONNECT;
             break;
         }else if (l == CFRP_WAIT){
-            LOG_INFO("continue...");
             break;
         }
         LOG_DEBUG("recv size: expected: %d, current: %d, p: %d", cl, l, *st);
@@ -626,20 +625,20 @@ extern int cfrp_recv_forward(cfrp* frp){
             }
            (*st)++;  
         }else if(*st == 1){
-            desc->len = cl;
-            desc->order = calloc(cl, sizeof(char));
-            memcpy(desc->order, buff, cl);
-            LOG_DEBUG("order: %s, length: %d", desc->order, cl);
+            tok->len = cl;
+            tok->token = calloc(cl, sizeof(char));
+            memcpy(tok->token, buff, cl);
+            LOG_DEBUG("token: %s, length: %d", tok->token, cl);
             (*st)++;
         }else{
-            c_sock* sock = map_get(&frp->mappers, desc->order);
+            c_sock* sock = map_get(&frp->mappers, tok->token);
             if(frp->type == CLIENT && !sock){
                 sock = calloc(1, sizeof(c_sock));
                 if( make_connect(frp->peers + 1, sock) != CFRP_ERR &&
                     setnoblocking(sock->sfd) != CFRP_ERR){
-                    cfrp_description* sdesc = make_cfrp_description(desc->len, desc->order);
+                    cfrp_token* sdesc = make_cfrp_token(tok->len, tok->token);
                     EPOLL_ADD(frp, sock->sfd, sdesc);
-                    map_put(&frp->mappers, sdesc->order, sock);
+                    map_put(&frp->mappers, sdesc->token, sock);
                 }else{
                     free(sock);
                     sock = (void*)0;
@@ -654,17 +653,17 @@ extern int cfrp_recv_forward(cfrp* frp){
             (*st) = 0;
             cl = hl;
             cbzero(head, hl);
-            free(desc->order);
-            cbzero(desc, sizeof(cfrp_description));
+            free(tok->token);
+            cbzero(tok, sizeof(cfrp_token));
         }
     }
     return r;
 }
 
 
-extern int cfrp_send_forward(cfrp* frp, cfrp_description* desc){
+extern int cfrp_send_forward(cfrp* frp, cfrp_token* tok){
     cfrp_head head;
-    c_sock* sock = map_get(&frp->mappers, desc->order);
+    c_sock* sock = map_get(&frp->mappers, tok->token);
     char buff[CFRP_BUFF_SIZE];
     int hs, bs, sfd, tfd, l, r, sl, total;
     hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); 
@@ -682,14 +681,14 @@ extern int cfrp_send_forward(cfrp* frp, cfrp_description* desc){
             break;
         }
         HEAD_MASK(&head, 0x01, MASK_1);
-        HEAD_MASK(&head, desc->len, MASK_2);
+        HEAD_MASK(&head, tok->len, MASK_2);
         HEAD_MASK(&head, l, MASK_3);
-        total = l + hs + desc->len;
+        total = l + hs + tok->len;
         char sbuff[total];
         memcpy(sbuff, &head, hs);
-        memcpy(sbuff + hs, desc->order, desc->len);
-        memcpy(sbuff + hs + desc->len, buff, l);
-        LOG_DEBUG("forward size: head: %d, order: %d, body: %d, total: %d", hs, desc->len, l, total);
+        memcpy(sbuff + hs, tok->token, tok->len);
+        memcpy(sbuff + hs + tok->len, buff, l);
+        LOG_DEBUG("forward size: head: %d, token: %d, body: %d, total: %d", hs, tok->len, l, total);
         if((sl = send(tfd, sbuff, total, 0)) < 0){
             r = CFRP_DISCONNECT;
             break;
@@ -703,10 +702,9 @@ extern int cfrp_send_forward(cfrp* frp, cfrp_description* desc){
     return r;
 }
 
-extern int cfrp_order(char* dest, unsigned int max){
+extern int cfrp_gentok(char* dest, unsigned int max){
     max = max < 10 ? 10: max;
     char buff[max], chr;
-    memset(buff, '\0', sizeof(buff));
     int i = 0;
     for(; i < max; i++){
         if(rand() % 2){
@@ -722,16 +720,16 @@ extern int cfrp_order(char* dest, unsigned int max){
     return CFRP_SUCC;
 }
 
-extern cfrp_description* cfrp_register(cfrp* frp, c_sock* sock){
-    char order[18];
+extern cfrp_token* cfrp_register(cfrp* frp, c_sock* sock){
+    char token[18];
     do{
-        cfrp_order(order, 18);
-    } while (map_get(&frp->mappers, order));
-    cfrp_description* desc = make_cfrp_description(18u, order);
+        cfrp_gentok(token, 18);
+    } while (map_get(&frp->mappers, token));
+    cfrp_token* tok = make_cfrp_token(18u, token);
     c_sock* msock = malloc(sizeof(c_sock));
     memcpy(msock, sock, sizeof(c_sock));
-    map_put(&frp->mappers, desc->order, msock);
-    return desc;
+    map_put(&frp->mappers, tok->token, msock);
+    return tok;
 }
 
 
@@ -748,10 +746,10 @@ extern void cfrp_clear_mappers(cfrp* frp){
     }
 }
 
-extern cfrp_description* make_cfrp_description(unsigned int len, char* order){
-    cfrp_description* desc = calloc(1, sizeof(cfrp_description));
-    desc->len = len;
-    desc->order = calloc(len, sizeof(char));
-    memcpy(desc->order, order, len);
-    return desc;
+extern cfrp_token* make_cfrp_token(unsigned int len, char* token){
+    cfrp_token* tok = calloc(1, sizeof(cfrp_token));
+    tok->len = len;
+    tok->token = calloc(len, sizeof(char));
+    memcpy(tok->token, token, len);
+    return tok;
 }
