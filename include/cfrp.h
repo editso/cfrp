@@ -75,6 +75,12 @@ typedef enum{
     CLIENT
 }c_cfrp;
 
+enum{
+    CFRP_MESSAGE = 0x01,
+    CFRP_POINT = 0x02,
+    CFRP_CLOSE = 0x03
+};
+
 /**
  * 数据包信息
 */
@@ -107,15 +113,6 @@ typedef struct{
     char* addr;
 } c_peer;
 
-/**
- * 当socket 连接成功时包含的信息
-*/
-typedef struct
-{   
-    int sfd;
-    c_peer peer;
-} c_sock;
-
 
 /**
  * cfrp token
@@ -130,6 +127,17 @@ typedef struct{
     */
     char *token;
 }cfrp_token;
+
+/**
+ * 当socket 连接成功时包含的信息
+*/
+typedef struct
+{   
+    int sfd;
+    cfrp_token tok;
+    c_peer peer;
+} c_sock;
+
 
 /**
  * 在传输过程中, 由于网络原因客户端发过来的数据不会一次性被接收全
@@ -201,7 +209,7 @@ extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size);
 /**
  * 创建一个token
 */
-extern cfrp_token* make_cfrp_token(unsigned int len, char* token);
+extern cfrp_token* make_cfrp_token(cfrp_token* tok, unsigned int len, char* token);
 
 /**
  * 设置非阻塞IO
