@@ -399,13 +399,7 @@ extern int run_client(cfrp* frp){
             if( s == CFRP_STOP ){
                 cfrp_stop(frp);
             }else if(s == CFRP_DISCONNECT || s == CFRP_DISMAPPER){
-                if(cfd == lfd){
-                    // cfrp_clear_mappers(frp);
-                    // close(cfd);
-                }else{
-                    printf("stat: %d, tok: %s\n", s, tok->token);
-                    cfrp_close(frp, tok);
-                }
+                cfrp_close(frp, tok);
             }else{
                 EPOLL_MOD(frp, cfd, &ev);
             }
@@ -545,7 +539,6 @@ extern int cfrp_recv_forward(cfrp* frp){
     char buff[CFRP_BUFF_SIZE];
     hl = sizeof(cfrp_head), cl = hl, st = &frp->state.op;
     LOOP{
-        printf("...\n");
         if(*st  == 0){
             cl = hl;
             cbzero(head, hl);
@@ -697,7 +690,9 @@ extern cfrp_token* cfrp_register(cfrp* frp, c_sock* sock){
 
 extern int cfrp_close(cfrp* frp, cfrp_token* tok){
     if(! tok) return 0;
-    c_sock *sock = map_get(&frp->mappers, tok->token);
+    c_sock *sock = map_remove(&frp->mappers, tok->token);
+    if(! sock) return 0; 
+    int r = CFRP_SUCC;
     LOG_DEBUG("close connect: fd: %d", sock->sfd);
     if(frp->sock[2].sfd == sock->sfd || frp->sock->sfd == sock->sfd){
         cfrp_clear_mappers(frp);
@@ -718,12 +713,12 @@ extern int cfrp_close(cfrp* frp, cfrp_token* tok){
         buff_recycle(&buff);
     }
     EPOLL_DEL(frp, sock->sfd, NULL);
-    if(shutdown(sock->sfd, SHUT_RDWR) < 0 || 
-       close(sock->sfd))
-        return CFRP_ERR;
-    return CFRP_SUCC;
+    if(shutdown(sock->sfd, SHUT_RDWR) < 0 || close(sock->sfd))
+        r = CFRP_ERR;
+    free(sock->tok.token);
+    free(sock);
+    return r;
 }
-
 
 extern void cfrp_clear_mappers(cfrp* frp){
     LOG_DEBUG("clear mappers");

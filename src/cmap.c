@@ -89,7 +89,7 @@ extern int map_put(cmap* map, void* key, void* value){
 */
 extern void *map_remove(cmap *map, void* key){
     if(! key) return (void*)0;
-    unsigned long hash = map_hash(map, key);
+    unsigned int hash = map_hash(map, key);
     clist* list = map->_elems[ map_hash_fun(map, key) ];
     if( ! list) return (void*)0;
     cmap_elem* el;
