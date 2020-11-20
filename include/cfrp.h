@@ -80,16 +80,15 @@ typedef enum{
 */
 typedef struct{
     /**
-     * 类型
-     * 1100000 0000000 0000000 0000000
+     * 11000000 00000000 00000000 00000000
      * 0x00: 关闭连接
      * 0x01: 常规发送
      * 0x02: 断点续传
      * 0x03: 预留
+     * 00111111 00000000 00000000 00000000
      * 校验信息长度
-     * 00111111 0000000 0000000 0000000
-     * 本次服务长度
-     * 00000000 0000000 0000000 1111111
+     * 00000000 11111111 11111111 11111111
+     * 本次传输数据总长度
      */
     unsigned int mask;
 }cfrp_head;
@@ -210,17 +209,6 @@ extern cfrp_token* make_cfrp_token(unsigned int len, char* token);
 extern int setnoblocking(int fd);
 
 /**
- * 打包
- * 
-*/
-extern char* cfrp_pack(cfrp_head*);
-
-/**
- * 解包
-*/
-extern cfrp_head* cfrp_unpack(char*);
-
-/**
  * 创建一个cfrp
  * @param peers 
  *        0: 监听地址
@@ -248,9 +236,10 @@ extern int make_tcp(c_peer *peer, c_sock *sock);
 */
 extern int make_connect(c_peer *peer, c_sock *sock);
 
-extern cfrp_head* make_head();
-
-extern unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b);
+/**
+ * 请求头信息
+*/
+extern int cfrp_mask(int *_mask, unsigned int n, unsigned int b);
 
 /**
  * 生成一个token

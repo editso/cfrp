@@ -1,6 +1,9 @@
 #include "logger.h"
 #include "stdio.h"
 
+/**
+ * 简单输出...
+*/
 extern void log_out(const char* message, const int level, const char *file,const char *func, const int line, ...){    
     va_list arg;
     va_start(arg, line);

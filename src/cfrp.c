@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <error.h>
 #include <errno.h>
-#include <time.h>
 
 #include "cfrp.h"
 #include "logger.h"
@@ -81,8 +80,6 @@ extern cfrp_token* cfrp_register(cfrp* frp, c_sock* sock);
 extern char* cfrp_unregister(cfrp* frp, c_sock* sock);
 
 extern void cfrp_clear_mappers(cfrp* frp);
-
-
 
 
 /**
@@ -181,7 +178,7 @@ typedef struct{
 /**
  * 设置cfrp转发头mask
 */
-#define HEAD_MASK(__head, v, p) (__head)->mask = cfrp_mask((__head)->mask, v, p) 
+#define HEAD_MASK(__head, v, p) cfrp_mask(&(__head)->mask, v, p) 
 
 
 /**
@@ -199,45 +196,24 @@ extern int setnoblocking(int fd){
 }
 
 
-/**
- * 打包
- * 
-*/
-extern char* cfrp_pack(cfrp_head *head){
-    int size = sizeof(cfrp_head);
-    char* _pack = (char *)malloc(sizeof(char) * size);
-    cbzero(_pack, sizeof(char) * size);
-    memcpy(_pack, head, size);
-    return _pack;
-}
-
-
-/**
- * 解包
-*/
-extern cfrp_head* cfrp_unpack(char* data){
-    int size = sizeof(cfrp_head);
-    cfrp_head* _pack = (cfrp_head *)malloc(size);
-    cbzero(_pack, size);
-    memcpy(_pack, data, sizeof(char) * size);
-    return _pack;
-}
-
-
-unsigned int cfrp_mask(unsigned int m, unsigned int n, unsigned int b){
+extern int cfrp_mask(int *_mask, unsigned int n, unsigned int b){
+    if(! _mask) return 0;
+    unsigned int m  = *_mask;
     if(m < 0)  m = 0;
     if(b == MASK_1){
         // 11000000 00000000 00000000 00000000
-        return (0 << 31 | n > 3 || n == 3 ? 3 << 30 : n << 30) | (m & ~(~0 << 30));
+        *_mask = (0 << 31 | n > 3 || n == 3 ? 3 << 30 : n << 30) | (m & ~(~0 << 30));
     }else if(b == MASK_2){
         // 00111111 00000000 00000000 000000000 
-        return (n > ~(~0 << 6) ? ~(~0 << 6) : n) << 24 | GMASK1(m) << 30 | GMASK3(m);
+        *_mask =  (n > ~(~0 << 6) ? ~(~0 << 6) : n) << 24 | GMASK1(m) << 30 | GMASK3(m);
     }else if (b == MASK_3)
     {
        // 00000000 11111111 11111111 11111111
-       return ~(0 << 8) << 24 & m | ( n > ~(~0 << 24) ? ~(~0 << 24): n );
+       *_mask = ~(0 << 8) << 24 & m | ( n > ~(~0 << 24) ? ~(~0 << 24): n );
+    }else{
+        return 0;
     }
-    return m;
+    return 1;
 }
 
 
@@ -507,13 +483,6 @@ extern int make_connect(c_peer* peer, c_sock *sock){
     return fd;
 }
 
-
-extern cfrp_head* make_head(){
-    cfrp_head* head  = (cfrp_head*)malloc(sizeof(cfrp_head));
-    cbzero(head, sizeof(cfrp_head));
-    return head;
-}
-
 extern int cfrp_listen(cfrp* frp, int sfd, int op, int events, void* _data){
     cfrp_epoll_data *data  = malloc(sizeof(cfrp_epoll_data));
     data->sfd = sfd;
@@ -550,7 +519,6 @@ extern int cfrp_close(cfrp* frp, int fd){
         return CFRP_ERR;
     return CFRP_SUCC;
 }
-
 
 extern int cfrp_recv(cfrp* frp, int fd, char* buff, int size){
     if(size <= 0)
@@ -620,6 +588,9 @@ extern int cfrp_recv_forward(cfrp* frp){
             (*st)++;
         }else{
             c_sock* sock = map_get(&frp->mappers, tok->token);
+            /**
+             * 判断是客户端还是服务端, 如果是客户端并且没有对应的映射信息那么创建一个新的
+            */
             if(frp->type == CLIENT && !sock){
                 sock = calloc(1, sizeof(c_sock));
                 if( make_connect(frp->peers + 1, sock) != CFRP_ERR &&
