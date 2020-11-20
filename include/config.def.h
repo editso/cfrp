@@ -13,6 +13,6 @@ c_peer server_mapper[] = {
  * 客户端映射信息
 */
 c_peer client_mapper[] = {
+    {8080, BIND_ADDR}, // 服务连接地址
     {22, LOCAL_ADDR}, // 映射端口
-    {8080, "127.0.0.1"} // 服务连接地址
 };

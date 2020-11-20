@@ -358,7 +358,7 @@ extern int run_server(cfrp* frp){
                    continue;
                 }else if(cfd == lfd){
                     /**
-                     * 被映射端连接
+                     * 被映射端连接,
                     */
                     LOG_INFO("client connect: %d", sock.sfd);
                     memcpy(frp->sock + 2, &sock, sizeof(c_sock));
