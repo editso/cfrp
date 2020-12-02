@@ -7,6 +7,5 @@
 
 
 ## 使用
-客户端构建 `make client`  
-服务端构建 `make server`  
-先启动服务端在启动客户端最后进行访问  
+执行: `make clean build`  
+先启动服务端在启动客户端最后进行访问
