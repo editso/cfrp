@@ -188,7 +188,7 @@ typedef struct{
     /**
      * 所有映射信息
     */
-    cmap mappers;
+    cmap mappings;
     /**
      * 由于网络原因,可能接收到的数据会出现不完整
     */

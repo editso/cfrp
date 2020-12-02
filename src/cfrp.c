@@ -6,10 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <error.h>
 #include <errno.h>
 #include <time.h>
-
 
 #include "cfrp.h"
 #include "logger.h"
@@ -222,7 +220,7 @@ extern int cfrp_mask(int *_mask, unsigned int n, unsigned int b){
 extern cfrp* mmake_cfrp(){
     cfrp* frp = (cfrp*)malloc(sizeof(cfrp));
     cbzero(frp, sizeof(cfrp));
-    map_init(&frp->mappers, 27);
+    map_init(&frp->mappings, 27);
     cbzero(&frp->cache, sizeof(cqueue));
     frp->cache.capacity = 5;
     frp->cache._elems = calloc(frp->cache.capacity, sizeof(void *));
@@ -579,7 +577,7 @@ extern int cfrp_recv_forward(cfrp* frp){
             }
             (*st)++;
         }else{
-            c_sock* sock = map_get(&frp->mappers, tok->token);
+            c_sock* sock = map_get(&frp->mappings, tok->token);
             /**
              * 判断是客户端还是服务端, 如果是客户端并且没有对应的映射信息那么创建一个新的
             */
@@ -610,7 +608,7 @@ extern int cfrp_recv_forward(cfrp* frp){
 
 extern int cfrp_send_forward(cfrp* frp, cfrp_token* tok){
     cfrp_head head;
-    c_sock* sock = map_get(&frp->mappers, tok->token);
+    c_sock* sock = map_get(&frp->mappings, tok->token);
     char buff[CFRP_BUFF_SIZE];
     int hs, bs, sfd, tfd, l, r, sl, total;
     hs = sizeof(cfrp_head); sfd = sock->sfd; bs = sizeof(buff); 
@@ -679,10 +677,10 @@ extern cfrp_token* cfrp_register(cfrp* frp, c_sock* sock){
         do{
             cfrp_gentok(token, 18);
             printf("token: %s\n", token);
-        } while (map_get(&frp->mappers, token));
+        } while (map_get(&frp->mappings, token));
         make_cfrp_token(&msock->tok, 18u, token);
     }
-    map_put(&frp->mappers, msock->tok.token, msock);
+    map_put(&frp->mappings, msock->tok.token, msock);
     EPOLL_ADD(frp, sock->sfd, &msock->tok);
     return &msock->tok;
 }
@@ -690,7 +688,7 @@ extern cfrp_token* cfrp_register(cfrp* frp, c_sock* sock){
 
 extern int cfrp_close(cfrp* frp, cfrp_token* tok){
     if(! tok) return 0;
-    c_sock *sock = map_remove(&frp->mappers, tok->token);
+    c_sock *sock = map_remove(&frp->mappings, tok->token);
     if(! sock) return 0; 
     int r = CFRP_SUCC;
     LOG_DEBUG("close connect: fd: %d", sock->sfd);
@@ -721,13 +719,13 @@ extern int cfrp_close(cfrp* frp, cfrp_token* tok){
 }
 
 extern void cfrp_clear_mappers(cfrp* frp){
-    LOG_DEBUG("clear mappers");
+    LOG_DEBUG("clear mappings");
     clist list;
     cbzero(&list, sizeof(clist));
-    map_keys(&frp->mappers, &list);
+    map_keys(&frp->mappings, &list);
     c_sock *sock;
     for(int i = 0; i < list.size; i++){
-        sock = map_remove(&frp->mappers, list_get(&list, i));
+        sock = map_remove(&frp->mappings, list_get(&list, i));
         if(! sock && 
             sock->sfd == CFRP_RFD(frp) || 
             sock->sfd == CFRP_LFD(frp) || 

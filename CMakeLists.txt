@@ -2,29 +2,12 @@ cmake_minimum_required(VERSION 3.17)
 project(cfrp)
 include_directories(include)
 
-set(    sources
-        src/clist.c
-        src/cfrp.c
-        src/cbuff.c
-        src/cmap.c
-        src/logger.c
-        src/cqueue.c
-        src/clib.c
-        )
+file(GLOB SOURCES src/*.c)
 
-add_executable(
-        server
-        server.c
-        ${sources})
+add_executable(server server.c ${SOURCES})
 
-add_executable(
-        client
-        client.c
-        ${sources}
-)
+add_executable(client client.c ${SOURCES})
 
-add_executable(
-        test
-        test.c
-        ${sources}
-)
+add_executable(cfrp cfrp.c ${SOURCES})
+
+add_executable(test test.c ${SOURCES})

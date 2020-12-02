@@ -6,10 +6,13 @@ OBJ_PATH = build/object
 
 BIN_PATH = build/bin
 
+
 ALL_CPP = $(wildcard $(SOURCE_PATH)/*.cpp)
 ALL_C = $(wildcard $(SOURCE_PATH)/*.c)
 ALL_H = $(wildcard $(INCLUDE_PATH)/*.h)
 ALL_OBJ = $(patsubst $(SOURCE_PATH)/%.c, $(OBJ_PATH)/%.o, $(ALL_C))
+
+
 
 CPP = g++ -I$(INCLUDE_PATH)
 CC = gcc -I$(INCLUDE_PATH) -std=c99 -g
