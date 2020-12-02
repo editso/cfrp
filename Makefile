@@ -1,38 +1,41 @@
-INCLUDE_PATH = include
 
-SOURCE_PATH = src
+# 头文件目录
+INCLUDE_PATH := include cargparser/include
+# 源文件目录
+SOURCE_PATH  := src cargparser/src
+# 编译生成的目录
+BUILD_PATH := build
+# 可执行文件
+BIN  = server client cfrp
 
-OBJ_PATH = build/object
+# 所有源文件
+ALL_INCLUDE := $(foreach file,$(INCLUDE_PATH),-I$(file))
+ALL_SOURCES := $(foreach file, $(SOURCE_PATH), $(wildcard $(file)/*.c))
+ALL_OBJ := $(foreach file, $(ALL_SOURCES), $(BUILD_PATH)/obj/$(file).o)
 
-BIN_PATH = build/bin
+# 命令
+CC := gcc $(ALL_INCLUDE)
 
+all: build
 
-ALL_CPP = $(wildcard $(SOURCE_PATH)/*.cpp)
-ALL_C = $(wildcard $(SOURCE_PATH)/*.c)
-ALL_H = $(wildcard $(INCLUDE_PATH)/*.h)
-ALL_OBJ = $(patsubst $(SOURCE_PATH)/%.c, $(OBJ_PATH)/%.o, $(ALL_C))
-
-
-
-CPP = g++ -I$(INCLUDE_PATH)
-CC = gcc -I$(INCLUDE_PATH) -std=c99 -g
-
-.PHONY:clean
-
-all: mkpath $(ALL_OBJ)
-
-$(ALL_OBJ): $(OBJ_PATH)/%.o : $(SOURCE_PATH)/%.c
+$(ALL_OBJ) : $(BUILD_PATH)/obj/%.o : % 
 	$(CC) -c $^ -o $@
 
-mkpath:
-	mkdir -p $(OBJ_PATH) $(BIN_PATH)
+% : mkpath $(ALL_OBJ) %.c config.h
+	$(CC) $(ALL_OBJ) $@.c -o $(BUILD_PATH)/bin/$@
 
-%:all %.c config.h
-	$(CC) $@.c $(ALL_OBJ) -o $(BIN_PATH)/$@
+.PHONY: build
+build: $(BIN)
+	@echo Build success!
+	@echo build path: $(BUILD_PATH)/bin
+
+.PHONY: mkpath
+mkpath:
+	@mkdir -p $(patsubst %, $(BUILD_PATH)/obj/%,$(SOURCE_PATH)) $(BUILD_PATH)/bin
+
+.PHONY:clean
+clean:
+	rm -rf ./$(BUILD_PATH)
 
 config.h:
-	cp $(INCLUDE_PATH)/config.def.h config.h
-
-clean:
-	rm -rf *.out $(OBJ_PATH) $(BIN_PATH)
-
+	cp include/config.def.h	config.h
