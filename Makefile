@@ -6,7 +6,7 @@ SOURCE_PATH  := src cargparser/src
 # 编译生成的目录
 BUILD_PATH := build
 # 可执行文件
-BIN  = server client cfrp
+BIN  := server client cfrp
 
 # 所有源文件
 ALL_INCLUDE := $(foreach file,$(INCLUDE_PATH),-I$(file))
@@ -14,7 +14,7 @@ ALL_SOURCES := $(foreach file, $(SOURCE_PATH), $(wildcard $(file)/*.c))
 ALL_OBJ := $(foreach file, $(ALL_SOURCES), $(BUILD_PATH)/obj/$(file).o)
 
 # 命令
-CC := gcc $(ALL_INCLUDE)
+CC := gcc $(ALL_INCLUDE) -std=c99
 
 all: build
 
@@ -23,6 +23,9 @@ $(ALL_OBJ) : $(BUILD_PATH)/obj/%.o : %
 
 % : mkpath $(ALL_OBJ) %.c config.h
 	$(CC) $(ALL_OBJ) $@.c -o $(BUILD_PATH)/bin/$@
+
+%.run: %.c mkpath $(ALL_OBJ)
+	$(CC) $(ALL_OBJ) $< -o $(BUILD_PATH)/bin/$(notdir $@)
 
 .PHONY: build
 build: $(BIN)
@@ -34,8 +37,8 @@ mkpath:
 	@mkdir -p $(patsubst %, $(BUILD_PATH)/obj/%,$(SOURCE_PATH)) $(BUILD_PATH)/bin
 
 .PHONY:clean
-clean:
-	rm -rf ./$(BUILD_PATH)
+clean:	
+	@rm -rfv ./$(BUILD_PATH)
 
 config.h:
 	cp include/config.def.h	config.h
