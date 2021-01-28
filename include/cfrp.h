@@ -30,7 +30,7 @@
 /**
  * 转发消息一次性最大可发送的大小
 */
-#define CFRP_BUFF_SIZE 1024 * 1024
+#define CFRP_BUFF_SIZE 1024 * 1024 * 4
 
 
 /**
