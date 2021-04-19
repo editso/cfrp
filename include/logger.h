@@ -1,3 +1,11 @@
+/*
+ * @Author: your name
+ * @Date: 1970-01-01 08:00:00
+ * @LastEditTime: 2021-01-29 10:31:22
+ * @LastEditors: Please set LastEditors
+ * @Description: In User Settings Edit
+ * @FilePath: /cfrp/include/logger.h
+ */
 #ifndef __LOGGER_H__
 #define __LOGGER_H__
 #include <stdarg.h>
@@ -8,6 +16,8 @@ enum{
     WARN,
     ERROR
 };
+
+
 
 // error
 #define LOG_ERROR(message, ...) log_out(message, ERROR, __FILE__, __func__, __LINE__, ##__VA_ARGS__)

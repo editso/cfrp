@@ -28,7 +28,7 @@ $(ALL_OBJ) : $(BUILD_PATH)/obj/%.o : %
 	$(CC) $(ALL_OBJ) $< -o $(BUILD_PATH)/bin/$(notdir $@)
 
 .PHONY: build
-build: $(BIN)
+build: config.h $(BIN)
 	@echo Build success!
 	@echo build path: $(BUILD_PATH)/bin
 
