@@ -9,3 +9,6 @@
 ## 使用
 执行: `make clean build`  
 先启动服务端在启动客户端最后进行访问
+
+# 该项目已被 [Fuso](https://github.com/editso/fuso) 替代
+
